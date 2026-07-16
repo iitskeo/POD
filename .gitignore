@@ -4,3 +4,4 @@ dist/
 .dev.vars
 .env
 spike/__pycache__/
+KEYS.txt

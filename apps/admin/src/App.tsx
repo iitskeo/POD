@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Canvas } from "./Canvas";
 import { Preview } from "./Preview";
+import { Productos } from "./Productos";
 
 const api = new ApiClient("http://localhost:8787");
 
@@ -48,6 +49,10 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [values, setValues] = useState<SlotValues>({});
   const [status, setStatus] = useState<string>("");
+  // El callback del OAuth vuelve con ?printful=..., asi que abrimos en Productos.
+  const [vista, setVista] = useState<"compositor" | "productos">(() =>
+    new URLSearchParams(location.search).has("printful") ? "productos" : "compositor",
+  );
 
   useEffect(() => {
     api.getDesign(DESIGN_ID)
@@ -157,20 +162,37 @@ export function App() {
     <div className="admin">
       <header className="topbar">
         <div className="brand">Abbiss</div>
-        <span className="eyebrow">Admin &middot; compositor</span>
-        <input
-          className="name-input"
-          value={design.name}
-          onChange={(e) => setDesign((d) => ({ ...d, name: e.target.value }))}
-        />
-        <div className="topbar-actions">
-          <span className="hint">{status}</span>
-          <button className="btn" onClick={() => save(false)}>Guardar</button>
-          <button className="cta" onClick={() => save(true)}>Publicar</button>
-        </div>
+        <nav className="tabs">
+          <button data-on={vista === "compositor"} onClick={() => setVista("compositor")}>
+            Compositor
+          </button>
+          <button data-on={vista === "productos"} onClick={() => setVista("productos")}>
+            Productos
+          </button>
+        </nav>
+        {vista === "compositor" && (
+          <>
+            <input
+              className="name-input"
+              value={design.name}
+              onChange={(e) => setDesign((d) => ({ ...d, name: e.target.value }))}
+            />
+            <div className="topbar-actions">
+              <span className="hint">{status}</span>
+              <button className="btn" onClick={() => save(false)}>Guardar</button>
+              <button className="cta" onClick={() => save(true)}>Publicar</button>
+            </div>
+          </>
+        )}
       </header>
 
-      <div className="admin-grid">
+      {vista === "productos" && (
+        <div style={{ padding: 20 }}>
+          <Productos api={api} />
+        </div>
+      )}
+
+      <div className="admin-grid" hidden={vista !== "compositor"}>
         <aside className="palette">
           <span className="eyebrow">Agregar</span>
           <button className="btn wide" onClick={addText}>Campo de texto</button>
