@@ -43,6 +43,57 @@ export interface Category {
   title: string;
 }
 
+/** Area imprimible de una variante, en pulgadas. */
+export interface PlacementDimension {
+  placement: string;
+  width: number;
+  height: number;
+  orientation: string;
+}
+
+export interface CatalogVariant {
+  id: number;
+  name: string;
+  size: string | null;
+  color: string | null;
+  color_code: string | null;
+  image: string;
+  placement_dimensions?: PlacementDimension[];
+}
+
+export interface MockupStyle {
+  placement: string;
+  display_name: string;
+  technique: string;
+  print_area_width: number;
+  print_area_height: number;
+  dpi: number;
+  mockup_styles?: Array<{ id: number; view_name: string; category_name: string }>;
+}
+
+export interface CatalogDetail {
+  product: { data?: CatalogProduct } | CatalogProduct;
+  styles: { data?: MockupStyle[] } | { error: string };
+  variants: { data?: CatalogVariant[]; paging?: { total: number } } | { error: string };
+}
+
+/** El precio no viene con el producto: vive por variante y por tecnica. */
+export interface ProductPrices {
+  currency: string;
+  variants: Array<{
+    id: number;
+    techniques: Array<{ technique_key: string; price: string; discounted_price: string }>;
+  }>;
+  discount_tiers?: Array<{ quantity: number; bulk_discount_percentage: number }>;
+}
+
+/** Precio minimo entre variantes: es el "desde $X" de la tarjeta. */
+export function minPrice(p: ProductPrices): number | null {
+  const all = p.variants.flatMap((v) => v.techniques.map((t) => Number(t.price)));
+  const ok = all.filter((n) => Number.isFinite(n) && n > 0);
+  return ok.length ? Math.min(...ok) : null;
+}
+
 export class ApiClient {
   constructor(private base: string) {}
 
@@ -86,7 +137,11 @@ export class ApiClient {
   }
 
   catalogProduct(id: number) {
-    return this.req<{ product: unknown; styles: unknown }>(`/api/printful/catalog/${id}`);
+    return this.req<CatalogDetail>(`/api/printful/catalog/${id}`);
+  }
+
+  productPrices(id: number) {
+    return this.req<{ data: ProductPrices }>(`/api/printful/catalog/${id}/prices`);
   }
 
   private async req<T>(path: string, init?: RequestInit): Promise<T> {

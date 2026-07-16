@@ -128,12 +128,21 @@ async function printfulRoutes(
     return json(data, {}, headers);
   }
 
+  // Todo el catalogo v2 exige la region, no solo el listado.
+  const region = url.searchParams.get("selling_region_name") ?? "worldwide";
+  const rq = `selling_region_name=${encodeURIComponent(region)}`;
+
+  // Precios aparte: el listado no los trae y pedirlos para los 498 seria inviable.
+  // Se piden solo para lo que el admin esta mirando.
+  const prices = path.match(/^\/api\/printful\/catalog\/(\d+)\/prices$/);
+  if (prices) {
+    const data = await call<unknown>(env, store, `/v2/catalog-products/${prices[1]}/prices?${rq}`);
+    return json(data, {}, headers);
+  }
+
   const detail = path.match(/^\/api\/printful\/catalog\/(\d+)$/);
   if (detail) {
     const id = detail[1];
-    // La region viaja tambien en el detalle: no solo el listado la exige.
-    const region = url.searchParams.get("selling_region_name") ?? "worldwide";
-    const rq = `selling_region_name=${encodeURIComponent(region)}`;
     // mockup-styles trae print_area_width/height: las medidas del template, que es
     // justo lo que hoy esta hardcodeado.
     const [product, styles, variants] = await Promise.all([

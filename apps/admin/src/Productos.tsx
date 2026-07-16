@@ -1,11 +1,18 @@
-import type { ApiClient, CatalogProduct, Category, PrintfulStatus } from "@abbiss/preview-engine";
-import { useEffect, useMemo, useState } from "react";
+import {
+  minPrice,
+  type ApiClient,
+  type CatalogProduct,
+  type Category,
+  type PrintfulStatus,
+} from "@abbiss/preview-engine";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Detalle } from "./Detalle";
 
 interface Props {
   api: ApiClient;
 }
 
-type Orden = "nombre" | "variantes" | "categoria";
+const VISIBLES = 48;
 
 /** categoria -> su raiz, subiendo por parent_id. Un producto cuelga de una hoja. */
 function rootOf(id: number, byId: Map<number, Category>): number {
@@ -27,10 +34,13 @@ export function Productos({ api }: Props) {
 
   const [q, setQ] = useState("");
   const [catId, setCatId] = useState<number | null>(null);
-  const [orden, setOrden] = useState<Orden>("nombre");
-  const [verDescontinuados, setVerDescontinuados] = useState(false);
+  const [abierto, setAbierto] = useState<CatalogProduct | null>(null);
 
-  const [aviso, setAviso] = useState<string | null>(() => {
+  // El precio no viene en el listado: se pide por producto y se cachea.
+  const [precios, setPrecios] = useState<Map<number, number | null>>(new Map());
+  const pidiendo = useRef(new Set<number>());
+
+  const [aviso] = useState<string | null>(() => {
     const p = new URLSearchParams(location.search);
     const v = p.get("printful");
     if (!v) return null;
@@ -55,7 +65,8 @@ export function Productos({ api }: Props) {
         ]);
         if (cancel) return;
         setCats(cs);
-        setItems(all);
+        // Los descontinuados no se pueden vender: no llegan ni a la lista.
+        setItems(all.filter((p) => !p.is_discontinued));
       } catch (e) {
         if (!cancel) setError(e instanceof Error ? e.message : String(e));
       }
@@ -70,22 +81,59 @@ export function Productos({ api }: Props) {
   const filtrados = useMemo(() => {
     if (!items) return [];
     const needle = q.trim().toLowerCase();
-    const out = items.filter((p) => {
-      if (!verDescontinuados && p.is_discontinued) return false;
-      if (catId && rootOf(p.main_category_id, byId) !== catId) return false;
-      if (!needle) return true;
-      return `${p.name} ${p.brand ?? ""} ${p.model ?? ""} ${p.type}`.toLowerCase().includes(needle);
-    });
-    out.sort((a, b) =>
-      orden === "variantes"
-        ? b.variant_count - a.variant_count
-        : orden === "categoria"
-          ? titulo(rootOf(a.main_category_id, byId)).localeCompare(titulo(rootOf(b.main_category_id, byId))) ||
-            a.name.localeCompare(b.name)
-          : a.name.localeCompare(b.name),
-    );
-    return out;
-  }, [items, q, catId, orden, verDescontinuados, byId]);
+    return items
+      .filter((p) => {
+        if (catId && rootOf(p.main_category_id, byId) !== catId) return false;
+        if (!needle) return true;
+        return `${p.name} ${p.brand ?? ""} ${p.model ?? ""} ${p.type}`.toLowerCase().includes(needle);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [items, q, catId, byId]);
+
+  const enPantalla = useMemo(() => filtrados.slice(0, VISIBLES), [filtrados]);
+
+  /**
+   * Pide precios solo de lo que esta en pantalla, de a pocos.
+   *
+   * Son 498 productos y una llamada por producto; pedirlos todos quemaria el rate
+   * limit de Printful para no mostrar 490 precios que nadie mira.
+   */
+  const pedirPrecios = useCallback(
+    async (lista: CatalogProduct[]) => {
+      const faltan = lista.filter((p) => !precios.has(p.id) && !pidiendo.current.has(p.id));
+      if (!faltan.length) return;
+      faltan.forEach((p) => pidiendo.current.add(p.id));
+
+      const POOL = 4;
+      for (let i = 0; i < faltan.length; i += POOL) {
+        const lote = faltan.slice(i, i + POOL);
+        const res = await Promise.all(
+          lote.map((p) =>
+            api.productPrices(p.id)
+              .then((r) => [p.id, minPrice(r.data)] as const)
+              .catch(() => [p.id, null] as const),
+          ),
+        );
+        setPrecios((prev) => {
+          const next = new Map(prev);
+          for (const [id, v] of res) next.set(id, v);
+          return next;
+        });
+      }
+    },
+    [api, precios],
+  );
+
+  useEffect(() => {
+    if (enPantalla.length) void pedirPrecios(enPantalla);
+  }, [enPantalla, pedirPrecios]);
+
+  // Buscar salta a "Todo": buscar "tumbler" dentro de Accessories no devuelve nada
+  // y parece que el buscador esta roto.
+  const buscar = (v: string) => {
+    setQ(v);
+    if (v.trim()) setCatId(null);
+  };
 
   if (!status) return <p className="hint">Consultando estado...</p>;
 
@@ -129,41 +177,23 @@ export function Productos({ api }: Props) {
 
   return (
     <div className="catalogo">
-      <div className="filtros">
-        <input
-          type="text"
-          className="buscador"
-          value={q}
-          placeholder="Buscar por nombre, marca o modelo..."
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <select value={orden} onChange={(e) => setOrden(e.target.value as Orden)}>
-          <option value="nombre">Nombre</option>
-          <option value="variantes">Mas variantes</option>
-          <option value="categoria">Categoria</option>
-        </select>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={verDescontinuados}
-            onChange={(e) => setVerDescontinuados(e.target.checked)}
-          />
-          Ver descontinuados
-        </label>
-      </div>
+      <input
+        type="text"
+        className="buscador"
+        value={q}
+        placeholder="Buscar por nombre, marca o modelo..."
+        onChange={(e) => buscar(e.target.value)}
+      />
 
       <div className="chips">
         <button data-on={catId === null} onClick={() => setCatId(null)}>
-          Todo ({items.filter((p) => verDescontinuados || !p.is_discontinued).length})
+          Todo ({items.length})
         </button>
         {raices.map((c) => {
-          const n = items.filter(
-            (p) =>
-              (verDescontinuados || !p.is_discontinued) && rootOf(p.main_category_id, byId) === c.id,
-          ).length;
+          const n = items.filter((p) => rootOf(p.main_category_id, byId) === c.id).length;
           if (!n) return null;
           return (
-            <button key={c.id} data-on={catId === c.id} onClick={() => setCatId(c.id)}>
+            <button key={c.id} data-on={catId === c.id} onClick={() => { setCatId(c.id); setQ(""); }}>
               {c.title} ({n})
             </button>
           );
@@ -176,27 +206,37 @@ export function Productos({ api }: Props) {
       </p>
 
       <div className="cat-grid">
-        {filtrados.slice(0, 60).map((p) => (
-          <article className="cat-card" key={p.id}>
-            <div className="cat-img">
-              <img src={p.image} alt={p.name} />
-            </div>
-            <h3>{p.name}</h3>
-            <p className="hint">
-              {p.brand ?? titulo(rootOf(p.main_category_id, byId))} &middot; {p.variant_count} variantes
-              {p.is_discontinued && " · descontinuado"}
-            </p>
-            <button className="btn wide" disabled title="Falta el cambio a wrapDegrees">
-              Importar
-            </button>
-          </article>
-        ))}
+        {enPantalla.map((p) => {
+          const precio = precios.get(p.id);
+          return (
+            <article className="cat-card" key={p.id}>
+              <button className="cat-open" onClick={() => setAbierto(p)} title="Ver detalles">
+                <div className="cat-img"><img src={p.image} alt={p.name} /></div>
+                <h3>{p.name}</h3>
+              </button>
+              <p className="hint">
+                {p.brand ?? titulo(rootOf(p.main_category_id, byId))} &middot; {p.variant_count} variantes
+              </p>
+              <p className="precio">
+                {precio === undefined ? "..." : precio === null ? "sin precio" : `desde $${precio.toFixed(2)}`}
+              </p>
+              <div className="cat-actions">
+                <button className="btn" onClick={() => setAbierto(p)}>Ver</button>
+                <button className="btn" disabled title="Falta el cambio a wrapDegrees">
+                  Importar
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
-      {filtrados.length > 60 && (
-        <p className="hint">Mostrando 60. Afina la busqueda para ver el resto.</p>
+      {filtrados.length > VISIBLES && (
+        <p className="hint">Mostrando {VISIBLES}. Afina la busqueda para ver el resto.</p>
       )}
       {filtrados.length === 0 && <p className="hint">Nada coincide con esa busqueda.</p>}
+
+      {abierto && <Detalle api={api} product={abierto} onClose={() => setAbierto(null)} />}
     </div>
   );
 }
