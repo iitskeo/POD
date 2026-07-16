@@ -149,6 +149,31 @@ h1 {
   opacity: 0.9;
 }
 
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--hueso) 14%, transparent);
+  cursor: pointer;
+  padding: 0;
+  outline-offset: 3px;
+  transition: transform 0.16s ease, outline-color 0.16s ease;
+  outline: 2px solid transparent;
+}
+
+.swatch:hover {
+  transform: translateY(-2px);
+}
+
+.swatch[aria-pressed="true"] {
+  outline-color: var(--senal);
+}
+
 input[type="text"] {
   width: 100%;
   background: var(--carbon);

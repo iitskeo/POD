@@ -22,7 +22,7 @@ en estado `pendiente_pago`.
 |---|---|
 | Origen de productos | Printify y Printful (hay API key de ambos) |
 | Personalización | Curada por el admin, no editor libre |
-| Zonas | Una de icono + una de texto por producto |
+| Modelo | Diseño por capas con slots tipados (ver 2.3) |
 | Preview | Compositing fotorrealista sobre foto real (no 3D, no overlay plano) |
 | Mapas | Derivados automáticamente + sliders de ajuste manual |
 | Iconos | Subida individual y masiva de SVG desde el admin |
@@ -35,6 +35,46 @@ en estado `pendiente_pago`.
 Un modelo 3D generado proceduralmente no muestra *el* producto, muestra *un*
 producto. El requisito es ver el producto real. La base del preview es por lo tanto
 una fotografía real del producto, no un render.
+
+### 2.3 Slots tipados (revisión tras analizar competidores)
+
+La versión anterior del spec definía "una zona de icono + una zona de texto por
+producto". **Era demasiado estrecho** y se descartó tras verificar cómo funcionan
+Wrappiness, Homacus y Sunflowerly. Los tres usan el mismo patrón:
+
+| Sitio | App que usan | Slots reales |
+|---|---|---|
+| Wrappiness | Teeinblue | Tono de piel + nombre, por personaje |
+| Homacus | Customily | 2 de color (9 fijos) + 2 de texto |
+| Sunflowerly | Customily | Foto + texto |
+
+El modelo correcto es un **diseño por capas con slots tipados**:
+
+- **`color`** — recolorea una capa concreta. Valores de una lista fija que define el
+  admin, nunca un color picker libre.
+- **`choice`** — intercambia el contenido de una capa desde un set curado (el icono
+  del lenguaje, un tono de piel).
+- **`text`** — texto libre con las reglas de 5.1.
+- **`photo`** — imagen subida por el cliente. **Fuera de alcance de la etapa 1**: exige
+  recorte de fondo, que es un subsistema aparte con costo por imagen. El tipo existe en
+  el modelo; no se implementa todavía.
+
+Un producto es la cosa física (el tumbler). Un **diseño** es lo que se imprime encima,
+y un producto aloja muchos diseños. Eso separa lo que viene de Printify de lo que
+creas tú.
+
+### 2.4 Por qué construir y no comprar
+
+Customily ($49/mes + comisión por artículo) hace esto y ya se integra con Printify,
+pero corre sobre Shopify/Etsy/WooCommerce y similares, no sobre un sitio propio.
+
+La razón real para construir está en la evidencia: **los previews de los competidores
+son de pago y racionados.** Sunflowerly muestra "You've used your free previews. Get
+unlimited previews for just $2"; Homacus tiene un botón "Preview" en vez de
+actualización continua. Los generan en servidor y cuestan dinero.
+
+El motor de este proyecto corre en la GPU del cliente: el preview es instantáneo,
+ilimitado y gratis. Ese es el diferenciador, y es justo el que ellos no pueden dar.
 
 ### 2.2 Por qué no los mockups del proveedor
 
@@ -74,9 +114,22 @@ Esto garantiza que lo aprobado en el admin es idéntico a lo que ve el cliente.
 Contrato del motor:
 
 ```
-render(producto, seleccion) -> canvas         // preview, con displacement+shading
-renderPrintFile(producto, seleccion) -> SVG   // arte plano, sin efectos, 300 DPI
+drawDesign(canvas, diseño, valores, escala) -> void   // arte plano por capas
+render(producto, arte) -> canvas                      // lo curva sobre la foto
 ```
+
+`drawDesign` es la misma llamada para el preview (escala baja) y para la imprenta
+(escala 1 = 300 DPI). Que sea el mismo codigo es lo que garantiza que lo impreso
+coincide con lo aprobado.
+
+**Cache del rasterizado:** recolorear exige re-rasterizar el SVG, que es caro. El texto
+no. El motor cachea el SVG rasterizado por combinacion de slots `color` y `choice`, y
+redibuja solo las capas de texto en cada tecla. Sin esto, escribir un nombre
+rasterizaria el SVG una vez por pulsacion.
+
+**Fuentes:** un SVG cargado como `<img>` no puede usar webfonts. Por eso el texto no
+vive en el SVG: el SVG aporta las formas y el color, y el texto se dibuja despues sobre
+el canvas, donde Space Grotesk si esta disponible.
 
 El motor no conoce Printify, ni React, ni D1. Recibe datos, devuelve píxeles.
 
@@ -181,30 +234,54 @@ No hay tabla de plantillas: cada producto tiene exactamente una zona de icono y 
 texto, así que son columnas del producto. Una tabla aparte sería abstracción de un
 solo uso.
 
-**`products`**
-- Identidad: `id`, `name`, `slug`, `price`, `status` (`borrador`|`publicado`)
+**`products`** - la cosa fisica, importada del proveedor.
+- Identidad: `id`, `name`, `slug`, `status` (`borrador`|`publicado`)
 - Origen: `source` (`printify`|`printful`|`manual`), `external_product_id`,
   `external_variant_id`
-- Assets R2: `photo_key`, `displacement_key`, `shading_key`, `mask_key`
+- Assets R2: `photo_key`
 - `surface`: `revolution` | `flat`
-- `calibration` (JSON): intensidad de curvatura, fuerza de sombra
-- `icon_zone` (JSON): rectángulo en coordenadas de la foto
-- `text_zone` (JSON): rectángulo + reglas (máx. caracteres, fuente, colores permitidos)
+- `calibration` (JSON): fuerza de sombra, ángulo de zona segura
+- `print_band` (JSON): dónde empieza la banda imprimible sobre la foto. La silueta no
+  lo dice (ver 4.2.3); lo marca el admin.
 - `print_spec` (JSON): dimensiones y DPI que espera el proveedor
+- `displacement_key`, `shading_key`, `mask_key`: solo para `surface = flat`
 
-**`icons`** - `id`, `name`, `slug`, `category`, `svg_key`, `active`
+**`designs`** - lo que se imprime encima. Un producto aloja muchos diseños.
+- `id`, `product_id`, `name`, `slug`, `price`, `status`
+- `svg_key`: el documento por capas en R2
+- `slots` (JSON): lista de slots tipados (ver 5.2)
 
-**`product_icons`** - tabla puente. Implementa el control del admin: qué iconos se
-ofrecen en qué producto.
+**`assets`** - la libreria de iconos y capas intercambiables.
+`id`, `name`, `slug`, `category`, `svg_key`, `active`. Los slots de tipo `choice`
+referencian estos ids.
 
 **`orders`** - cliente, envío, totales, `status`
 (`pendiente_pago` -> `pagado` -> `enviado_a_proveedor` -> `cumplido`)
 
-**`order_items`** - `product_id`, `icon_id`, `text`, `print_art_key`, `preview_key`
+**`order_items`** - `design_id`, `values` (JSON: slot_id -> valor), `print_art_key`,
+`preview_key`
 
-`icon_id` + `text` son la receta y la fuente de verdad. `print_art_key` es nulo hasta
-que el Worker rasteriza el arte al mandarlo al proveedor (ver 4.3); a partir de ahí
-queda como registro inmutable de lo que se imprimió.
+`design_id` + `values` son la receta y la fuente de verdad. `print_art_key` es nulo
+hasta que el Worker rasteriza el arte al mandarlo al proveedor (ver 4.3); a partir de
+ahí queda como registro inmutable de lo que se imprimió.
+
+### 5.2 Formato de los slots
+
+Cada slot apunta a un `data-slot` del SVG:
+
+```json
+[
+  { "id": "badge",  "type": "color",  "target": "badge",
+    "options": ["#FF5A1F", "#0A0A0A", "#F5F5F0"], "default": "#FF5A1F" },
+  { "id": "lang",   "type": "choice", "target": "icon",
+    "options": ["code", "serpiente", "taza"], "default": "code" },
+  { "id": "nombre", "type": "text",   "target": "nombre",
+    "maxChars": 18, "minSizeFrac": 0.1, "maxLines": 2, "color": "#FF5A1F" }
+]
+```
+
+Los slots `choice` y `text` apuntan a un elemento placeholder del SVG que da su
+posición y tamaño; el placeholder no se rasteriza.
 
 Guardar el preview del cliente no es redundante: es el respaldo ante un reclamo, la
 imagen exacta que el cliente aprobó al comprar.
@@ -296,7 +373,10 @@ Cada entrega tiene su propio plan de implementación.
 ## 11. Fuera de alcance (etapa 1)
 
 - Cobro (adaptador preparado, no implementado)
-- Múltiples iconos por producto
+- Slots de tipo `photo` (exigen recorte de fondo: subsistema aparte con costo por
+  imagen). El tipo existe en el modelo.
+- Generación de diseño con IA. Ninguno de los competidores analizados lo hace: lo que
+  parece IA en Sunflowerly es recorte de fondo sobre una plantilla fija.
 - Arrastre libre de elementos
 - Cuentas de cliente
 - Envío de la orden al proveedor en automático (el estado existe; el disparo es manual)

@@ -1,47 +1,57 @@
 import {
   DEFAULT_CALIBRATION,
+  DesignComposer,
   PreviewRenderer,
   WINE_TUMBLER_11OZ,
+  defaultValues,
   diameterFromWrap,
-  drawArt,
   extractProfile,
   pixelsPerInch,
   safeWidthFrac,
-  type ArtLayout,
+  type Design,
   type Profile,
+  type SlotValues,
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const ICONS = [
-  { slug: "code", name: "Code" },
-  { slug: "braces", name: "Braces" },
-  { slug: "terminal", name: "Terminal" },
-  { slug: "serpiente", name: "Serpiente" },
-  { slug: "taza", name: "Taza" },
-  { slug: "rama", name: "Rama" },
-];
+const ICONS = ["code", "braces", "terminal", "serpiente", "taza", "rama"];
 
-const MAX_CHARS = 18;
-
-const LAYOUT: ArtLayout = {
+/**
+ * Este diseno vendra de D1; aqui esta inline mientras no exista el admin.
+ * Los colores del marco son neutros y los acentos viven solo en la barra: el manual
+ * exige un unico acento por composicion, y curando las opciones el cliente no puede
+ * romperlo.
+ */
+const DESIGN: Omit<Design, "svg"> = {
+  id: "terminal",
+  name: "Terminal",
   spec: WINE_TUMBLER_11OZ,
-  iconZone: { sizeFrac: 0.42, centerYFrac: 0.36 },
-  textZone: {
-    heightFrac: 0.26,
-    centerYFrac: 0.74,
-    maxChars: MAX_CHARS,
-    minSizeFrac: 0.1,
-    maxLines: 2,
-    color: "#ff5a1f",
-    fontFamily: '"Space Grotesk", sans-serif',
-  },
   safeAngleDeg: DEFAULT_CALIBRATION.safeAngleDeg,
+  slots: [
+    {
+      id: "marco", type: "color", label: "Marco", target: "marco",
+      options: ["#F5F5F0", "#FFFFFF", "#E4E4DC"], default: "#F5F5F0",
+    },
+    {
+      id: "barra", type: "color", label: "Barra", target: "barra",
+      options: ["#FF5A1F", "#0A0A0A", "#161616"], default: "#FF5A1F",
+    },
+    {
+      id: "icono", type: "choice", label: "Lenguaje", target: "icono",
+      options: ICONS, default: "code",
+    },
+    {
+      id: "nombre", type: "text", label: "Tu nombre o puesto", target: "nombre",
+      maxChars: 18, minSizeFrac: 0.11, maxLines: 2,
+      color: "#0A0A0A", fontFamily: '"Space Grotesk", sans-serif',
+      placeholder: "Escribe aqui",
+    },
+  ],
 };
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
     img.src = src;
@@ -61,16 +71,14 @@ export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const artRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const rendererRef = useRef<PreviewRenderer | null>(null);
-  const iconsRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const composerRef = useRef<DesignComposer | null>(null);
 
+  const [design, setDesign] = useState<Design | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [iconSlug, setIconSlug] = useState("code");
-  const [text, setText] = useState("KENNETH");
+  const [values, setValues] = useState<SlotValues>({});
   const [overflow, setOverflow] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
 
-  // La banda imprimible: la silueta da la escala, el spec da el alto fisico.
   const band = useMemo(() => {
     if (!profile) return null;
     const diameter = diameterFromWrap(WINE_TUMBLER_11OZ.widthPx / WINE_TUMBLER_11OZ.dpi);
@@ -84,44 +92,47 @@ export function App() {
     (async () => {
       try {
         await document.fonts.ready;
-        const [photo, ...icons] = await Promise.all([
+        const assets = new Map<string, HTMLImageElement>();
+        const [photo, svg, ...icons] = await Promise.all([
           loadImage("/tumbler.png"),
-          ...ICONS.map((i) => loadImage(`/icons/${i.slug}.svg`)),
+          fetch("/designs/terminal.svg").then((r) => r.text()),
+          ...ICONS.map((s) => loadImage(`/icons/${s}.svg`)),
         ]);
         if (cancelled) return;
-        ICONS.forEach((i, n) => iconsRef.current.set(i.slug, icons[n]));
+        ICONS.forEach((s, i) => assets.set(s, icons[i]));
 
         const canvas = canvasRef.current!;
         canvas.width = photo.naturalWidth;
         canvas.height = photo.naturalHeight;
         rendererRef.current = new PreviewRenderer(canvas, photo);
+        composerRef.current = new DesignComposer({ get: (s) => assets.get(s) });
+
+        const d: Design = { ...DESIGN, svg };
         setProfile(extractProfile(toImageData(photo)));
-        setReady(true);
+        setValues({ ...defaultValues(d), nombre: "KENNETH" });
+        setDesign(d);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     const renderer = rendererRef.current;
-    if (!renderer || !profile || !band) return;
-    const res = drawArt(
-      artRef.current,
-      LAYOUT,
-      { icon: iconsRef.current.get(iconSlug) ?? null, text },
-      0.5,
-    );
-    setOverflow(res.overflow);
-    renderer.render({ profile, band, art: artRef.current });
-  }, [profile, band, iconSlug, text]);
+    const composer = composerRef.current;
+    if (!renderer || !composer || !design || !profile || !band) return;
+    let stale = false;
+    (async () => {
+      const res = await composer.draw(artRef.current, design, values, 0.5);
+      if (stale) return;
+      setOverflow(res.overflow);
+      renderer.render({ profile, band, art: artRef.current });
+    })();
+    return () => { stale = true; };
+  }, [design, profile, band, values]);
 
-  const safePct = Math.round(
-    safeWidthFrac(LAYOUT.safeAngleDeg, WINE_TUMBLER_11OZ.wraps360) * 100,
-  );
+  const set = (id: string, v: string) => setValues((p) => ({ ...p, [id]: v }));
 
   if (error) {
     return (
@@ -133,6 +144,11 @@ export function App() {
     );
   }
 
+  const safePct = Math.round(
+    safeWidthFrac(DESIGN.safeAngleDeg, WINE_TUMBLER_11OZ.wraps360) * 100,
+  );
+  const textSlot = DESIGN.slots.find((s) => s.type === "text");
+
   return (
     <div className="wrap">
       <div className="brand">Abbiss</div>
@@ -141,8 +157,8 @@ export function App() {
         <p className="eyebrow">Paso 01 &middot; Personaliza</p>
         <h1>Tu tumbler, con tu nombre.</h1>
         <p className="lede">
-          Elige un icono, escribe tu nombre y ve exactamente como queda. Sin cuenta,
-          sin registrarte.
+          Elige tu lenguaje, ponle color y escribe tu nombre. Lo ves al instante, tal
+          como va a quedar. Sin cuenta, sin registrarte.
         </p>
       </header>
 
@@ -152,40 +168,72 @@ export function App() {
         </div>
 
         <div className="panel">
-          <div className="field">
-            <span className="eyebrow">Icono</span>
-            <div className="icons">
-              {ICONS.map((i) => (
-                <button
-                  key={i.slug}
-                  className="icon-btn"
-                  aria-pressed={iconSlug === i.slug}
-                  onClick={() => setIconSlug(i.slug)}
-                  title={i.name}
-                >
-                  <img src={`/icons/${i.slug}.svg`} alt={i.name} />
-                </button>
-              ))}
-            </div>
-          </div>
+          {DESIGN.slots.map((slot) => {
+            if (slot.type === "color") {
+              return (
+                <div className="field" key={slot.id}>
+                  <span className="eyebrow">{slot.label}</span>
+                  <div className="swatches">
+                    {slot.options.map((c) => (
+                      <button
+                        key={c}
+                        className="swatch"
+                        style={{ background: c }}
+                        aria-pressed={values[slot.id] === c}
+                        aria-label={c}
+                        onClick={() => set(slot.id, c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            if (slot.type === "choice") {
+              return (
+                <div className="field" key={slot.id}>
+                  <span className="eyebrow">{slot.label}</span>
+                  <div className="icons">
+                    {slot.options.map((s) => (
+                      <button
+                        key={s}
+                        className="icon-btn"
+                        aria-pressed={values[slot.id] === s}
+                        onClick={() => set(slot.id, s)}
+                        title={s}
+                      >
+                        <img src={`/icons/${s}.svg`} alt={s} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            if (slot.type === "text") {
+              return (
+                <div className="field" key={slot.id}>
+                  <span className="eyebrow">{slot.label}</span>
+                  <input
+                    type="text"
+                    value={values[slot.id] ?? ""}
+                    maxLength={slot.maxChars}
+                    placeholder={slot.placeholder}
+                    onChange={(e) => set(slot.id, e.target.value)}
+                  />
+                  <p className="hint" data-warn={overflow}>
+                    {overflow
+                      ? "Se pasa del area segura. Acorta el texto."
+                      : `${(values[slot.id] ?? "").length}/${slot.maxChars} caracteres`}
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })}
 
-          <div className="field">
-            <span className="eyebrow">Tu nombre o puesto</span>
-            <input
-              type="text"
-              value={text}
-              maxLength={MAX_CHARS}
-              placeholder="Escribe aqui"
-              onChange={(e) => setText(e.target.value)}
-            />
-            <p className="hint" data-warn={overflow}>
-              {overflow
-                ? "Se pasa del area segura. Acorta el texto."
-                : `${text.length}/${MAX_CHARS} caracteres`}
-            </p>
-          </div>
-
-          <button className="cta" disabled={!ready || overflow || !text.trim()}>
+          <button
+            className="cta"
+            disabled={!design || overflow || !(values[textSlot?.id ?? ""] ?? "").trim()}
+          >
             Agregar al carrito
           </button>
 
