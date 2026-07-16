@@ -103,10 +103,49 @@ una capa más de arte.
 Ocurre en el navegador del admin, una sola vez por producto:
 
 - El admin sube/importa la foto y marca el área imprimible.
-- El canvas deriva displacement y shading de la luminancia de la propia foto, usando
-  `surface` (`revolution` | `flat`) para saber qué curvatura asumir.
+- El canvas deriva los mapas (ver 4.2.1 para `revolution`, 4.2.2 para `flat`).
 - Sliders ajustan intensidad de curvatura y fuerza de sombra hasta que se vea bien.
 - Los mapas resultantes se suben a R2 ya listos.
+
+#### 4.2.1 Superficies de revolución: geometría exacta, no derivada
+
+Para `surface = revolution` la geometría **no se deriva de la luminancia**: se conoce
+analíticamente. La silueta del producto contra el fondo en la foto *es* el perfil
+`R(y)` del sólido, incluyendo afinados y curvas (el wine tumbler no es un cilindro:
+se estrecha abajo). Se extrae de la propia foto por umbral de contraste contra el
+fondo.
+
+Con `R(y)`, el mapeo del archivo de impresión a pantalla es exacto:
+
+```
+u (0..1 del archivo) -> θ = (u - 0.5) · 2π
+x_pantalla = cx + R(y) · sin(θ)
+compresión horizontal = cos(θ)      // 0 en los bordes, 1 al centro
+visible cuando cos(θ) > 0           // cara frontal
+```
+
+La luminancia se usa solo para el **shading**, que es para lo que sirve. Esto es más
+fiel y más simple que un displacement derivado, y elimina un slider.
+
+#### 4.2.2 Superficies planas
+
+Para `surface = flat` (camisetas) no hay geometría analítica: ahí sí aplica el
+displacement derivado de luminancia, que aproxima los pliegues de la tela. Es el caso
+donde un mapa hecho a mano da mejor resultado y donde el override manual importa.
+
+### 4.2.3 Zona segura (hallazgo del template real)
+
+El template de Printify del Wine Tumbler (12oz) es **3278 × 900 px a 300 DPI =
+10.93 × 3.00 in**. Ese ancho es la **circunferencia completa**: 10.93 / π = 3.48 in de
+diámetro. El archivo de impresión **envuelve el producto 360°**.
+
+Consecuencia para el personalizador: la cámara solo ve la cara frontal, y por
+`cos(θ)` la banda legible es aproximadamente el **40% central** del archivo. Los
+bordes se comprimen hasta desaparecer.
+
+El `text_zone` y el `icon_zone` deben por tanto vivir dentro de esa zona segura, y el
+admin debe verla dibujada al calibrar. Sin esto, un cliente escribe un nombre largo y
+se le va por los lados del vaso.
 
 Se hace en el cliente porque los Workers no tienen buenas librerías de procesamiento
 de imagen, la operación es puntual, y el admin necesita ver el resultado mientras
