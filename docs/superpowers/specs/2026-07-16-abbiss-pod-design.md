@@ -151,6 +151,10 @@ ofrecen en qué producto.
 
 **`order_items`** - `product_id`, `icon_id`, `text`, `print_art_key`, `preview_key`
 
+`icon_id` + `text` son la receta y la fuente de verdad. `print_art_key` es nulo hasta
+que el Worker rasteriza el arte al mandarlo al proveedor (ver 4.3); a partir de ahí
+queda como registro inmutable de lo que se imprimió.
+
 Guardar el preview del cliente no es redundante: es el respaldo ante un reclamo, la
 imagen exacta que el cliente aprobó al comprar.
 
@@ -207,7 +211,33 @@ Del manual Abbiss v1:
   Sin degradados, sin neón, sin efectos.
 - **Voz**: tuteo, clara y resolutiva. Sin jerga sin explicar. Sin promesas irreales.
 
-## 10. Fuera de alcance (etapa 1)
+## 10. Orden de construcción
+
+El alcance es demasiado grande para un solo plan de implementación. Se descompone en
+cuatro entregas, y el orden no es negociable:
+
+**0. Spike del motor de preview (primero, antes que nada).**
+Un prototipo mínimo: una foto real de tumbler, un icono, un texto, el shader de
+displacement + shading + máscara. Sin React, sin D1, sin admin. El único objetivo es
+contestar una pregunta: *¿se ve lo suficientemente real?*
+
+Todo el negocio descansa en esa apuesta y hoy no está verificada. Si el resultado no
+convence con las fotos reales, el concepto del producto cambia y el resto del diseño
+se replantea. Descubrirlo después de construir el admin y el storefront sería el error
+más caro posible. Criterio de éxito: el usuario mira el preview junto a una foto del
+producto real y no sabe distinguir cuál lleva el diseño impreso.
+
+**1. Motor + API + esquema D1.** El paquete del motor terminado con sus golden-image
+tests, el Worker con los clientes de Printify/Printful, y las tablas.
+
+**2. Admin.** Import, calibración con sliders, librería de iconos, publicación. Va
+antes que el storefront porque es lo que produce los datos que el storefront consume.
+
+**3. Storefront.** Landing, personalizador, carrito, captura de orden.
+
+Cada entrega tiene su propio plan de implementación.
+
+## 11. Fuera de alcance (etapa 1)
 
 - Cobro (adaptador preparado, no implementado)
 - Múltiples iconos por producto
