@@ -1,5 +1,6 @@
 import {
   DesignComposer,
+  elementLabel,
   safeRect,
   type Design,
   type Rect,
@@ -41,7 +42,7 @@ export function Canvas({ design, values, composer, selectedId, onSelect, onMove 
     return () => { stale = true; };
   }, [design, values, composer]);
 
-  /** px de pantalla -> px del archivo de impresion. */
+  /** screen px -> print file px. */
   const toFile = (dx: number, dy: number) => {
     const el = wrapRef.current!;
     const k = W / el.clientWidth;
@@ -93,7 +94,7 @@ export function Canvas({ design, values, composer, selectedId, onSelect, onMove 
         <canvas ref={canvasRef} />
 
         <div className="safe-zone" style={pct(safe)}>
-          <span className="safe-tag">zona segura &plusmn;{design.safeAngleDeg}&deg;</span>
+          <span className="safe-tag">safe zone &plusmn;{design.safeAngleDeg}&deg;</span>
         </div>
 
         {design.elements.map((el) => (
@@ -108,7 +109,7 @@ export function Canvas({ design, values, composer, selectedId, onSelect, onMove 
               setDrag({ mode: "move", id: el.id, startX: e.clientX, startY: e.clientY, orig: el.rect });
             }}
           >
-            <span className="el-tag">{el.kind === "text" ? el.label : el.slug}</span>
+            <span className="el-tag">{elementLabel(el)}</span>
             {el.id === selectedId && (
               <span
                 className="el-handle"
@@ -123,9 +124,9 @@ export function Canvas({ design, values, composer, selectedId, onSelect, onMove 
       </div>
 
       <p className="hint">
-        El archivo mide {W} &times; {H} px y envuelve el vaso 360&deg;. Solo el{" "}
-        {Math.round((safe.w / W) * 100)}% central se ve de frente: fuera de la zona
-        segura el diseno se va por detras.
+        The file is {W} &times; {H} px and wraps {design.spec.wrapDegrees ?? 360}&deg; around
+        the product. Only the middle {Math.round((safe.w / W) * 100)}% is visible from the
+        front: past the safe zone the design goes around the back.
       </p>
     </div>
   );

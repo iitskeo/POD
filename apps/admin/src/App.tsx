@@ -5,6 +5,7 @@
   SEED_ASSETS,
   WINE_TUMBLER,
   defaultValues,
+  elementLabel,
   safeRect,
   seedLibrary,
   svgDataUrl,
@@ -18,18 +19,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Canvas } from "./Canvas";
 import { Preview } from "./Preview";
-import { Productos } from "./Productos";
+import { Products } from "./Products";
 
 const api = new ApiClient("http://localhost:8787");
 
-/** Paleta de la marca. El admin elige de aqui que colores ofrece cada slot. */
-const PALETA = ["#0A0A0A", "#161616", "#F5F5F0", "#FFFFFF", "#E4E4DC", "#FF5A1F"];
+/** Brand palette. The admin picks from here which colors each slot offers. */
+const PALETTE = ["#0A0A0A", "#161616", "#F5F5F0", "#FFFFFF", "#E4E4DC", "#FF5A1F"];
 
 const DESIGN_ID = "terminal";
 
 /**
- * El producto viene hardcodeado mientras no exista el import de Printify.
- * Sus medidas salen del template oficial del Wine Tumbler 11oz.
+ * The product is hardcoded until the Printful import exists.
+ * Its measurements come from Printful's Wine Tumbler catalog entry.
  */
 const EMPTY: Design = {
   id: DESIGN_ID,
@@ -49,21 +50,21 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [values, setValues] = useState<SlotValues>({});
   const [status, setStatus] = useState<string>("");
-  // El callback del OAuth vuelve con ?printful=..., asi que abrimos en Productos.
-  const [vista, setVista] = useState<"compositor" | "productos">(() =>
-    new URLSearchParams(location.search).has("printful") ? "productos" : "compositor",
+  // The OAuth callback returns with ?printful=..., so open on Products.
+  const [view, setVista] = useState<"composer" | "products">(() =>
+    new URLSearchParams(location.search).has("printful") ? "products" : "composer",
   );
 
   useEffect(() => {
     api.getDesign(DESIGN_ID)
       .then((d) => setDesign({ ...EMPTY, name: d.name, elements: d.elements }))
-      .catch(() => setStatus("Diseno nuevo (no habia nada guardado)"));
+      .catch(() => setStatus("New design (nothing was saved yet)"));
   }, []);
 
-  // El texto de muestra se conserva al editar, pero los colores y los iconos NO:
-  // tienen que seguir al default del slot. Conservarlos hacia que el admin siguiera
-  // mostrando un valor viejo mientras el cliente veia el nuevo, y un admin que
-  // aprueba algo distinto a lo que se imprime es peor que no tener admin.
+  // Sample text survives edits, but colors and icons must NOT: they have to follow
+  // the slot default. Keeping them made the admin show a stale value while the
+  // customer saw the new one, and an admin that approves something other than what
+  // prints is worse than no admin.
   useEffect(() => {
     setValues((prev) => {
       const base = defaultValues(design);
@@ -83,8 +84,8 @@ export function App() {
 
   const addAsset = (slug: string) => {
     const asset = SEED_ASSETS.find((a) => a.slug === slug)!;
-    // Entra con la proporcion de su viewBox: una caja cuadrada lo deformaria.
-    const h = asset.category === "forma" ? 470 : 260;
+    // Enters at its viewBox aspect: a square box would distort it.
+    const h = asset.category === "shape" ? 470 : 260;
     const w = Math.round(h * asset.aspect);
     const el: AssetElement = {
       id: uid(),
@@ -99,7 +100,7 @@ export function App() {
       recolor: asset.recolorParts.map((part) => ({
         part,
         label: part,
-        options: PALETA,
+        options: PALETTE,
         default: "#0A0A0A",
       })),
     };
@@ -112,13 +113,13 @@ export function App() {
       id: uid(),
       kind: "text",
       rect: { x: Math.round(safe.x), y: 620, w: Math.round(safe.w), h: 170 },
-      label: "Tu nombre",
+      label: "Your name",
       maxChars: 18,
       minSizeFrac: 0.11,
       maxLines: 2,
       color: "#0A0A0A",
       fontFamily: '"Space Grotesk", sans-serif',
-      placeholder: "Escribe aqui",
+      placeholder: "Type here",
     };
     setDesign((d) => ({ ...d, elements: [...d.elements, el] }));
     setSelectedId(el.id);
@@ -140,7 +141,7 @@ export function App() {
     });
 
   const save = async (publish: boolean) => {
-    setStatus("Guardando...");
+    setStatus("Saving...");
     try {
       await api.saveDesign({
         id: design.id,
@@ -148,11 +149,11 @@ export function App() {
         name: design.name,
         slug: design.id,
         priceCents: 2495,
-        status: publish ? "publicado" : "borrador",
+        status: publish ? "published" : "draft",
         baseImageKey: null,
         elements: design.elements,
       });
-      setStatus(publish ? "Publicado" : "Guardado como borrador");
+      setStatus(publish ? "Published" : "Saved as draft");
     } catch (e) {
       setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -163,14 +164,14 @@ export function App() {
       <header className="topbar">
         <div className="brand">Abbiss</div>
         <nav className="tabs">
-          <button data-on={vista === "compositor"} onClick={() => setVista("compositor")}>
-            Compositor
+          <button data-on={view === "composer"} onClick={() => setVista("composer")}>
+            Composer
           </button>
-          <button data-on={vista === "productos"} onClick={() => setVista("productos")}>
-            Productos
+          <button data-on={view === "products"} onClick={() => setVista("products")}>
+            Products
           </button>
         </nav>
-        {vista === "compositor" && (
+        {view === "composer" && (
           <>
             <input
               className="name-input"
@@ -179,29 +180,29 @@ export function App() {
             />
             <div className="topbar-actions">
               <span className="hint">{status}</span>
-              <button className="btn" onClick={() => save(false)}>Guardar</button>
-              <button className="cta" onClick={() => save(true)}>Publicar</button>
+              <button className="btn" onClick={() => save(false)}>Save</button>
+              <button className="cta" onClick={() => save(true)}>Publish</button>
             </div>
           </>
         )}
       </header>
 
-      {vista === "productos" && (
+      {view === "products" && (
         <div style={{ padding: 20 }}>
-          <Productos api={api} />
+          <Products api={api} />
         </div>
       )}
 
-      <div className="admin-grid" hidden={vista !== "compositor"}>
+      <div className="admin-grid" hidden={view !== "composer"}>
         <aside className="palette">
-          <span className="eyebrow">Agregar</span>
-          <button className="btn wide" onClick={addText}>Campo de texto</button>
+          <span className="eyebrow">Add</span>
+          <button className="btn wide" onClick={addText}>Text field</button>
           <div className="asset-grid">
             {SEED_ASSETS.map((a) => (
               <button
                 key={a.slug}
                 className="asset-btn"
-                title={`${a.name}${a.recolorParts.length ? ` (${a.recolorParts.length} partes)` : ""}`}
+                title={`${a.name}${a.recolorParts.length ? ` (${a.recolorParts.length} parts)` : ""}`}
                 onClick={() => addAsset(a.slug)}
               >
                 <img src={svgDataUrl(a.svg)} alt={a.name} />
@@ -209,19 +210,19 @@ export function App() {
             ))}
           </div>
 
-          <span className="eyebrow" style={{ marginTop: 18 }}>Capas</span>
+          <span className="eyebrow" style={{ marginTop: 18 }}>Layers</span>
           <ul className="layers">
             {[...design.elements].reverse().map((el) => (
               <li key={el.id} data-selected={el.id === selectedId}>
                 <button className="layer-name" onClick={() => setSelectedId(el.id)}>
-                  {el.kind === "text" ? el.label : el.slug}
+                  {elementLabel(el)}
                 </button>
-                <button className="mini" onClick={() => raise(el.id, 1)} title="Subir">^</button>
-                <button className="mini" onClick={() => raise(el.id, -1)} title="Bajar">v</button>
-                <button className="mini" onClick={() => remove(el.id)} title="Quitar">x</button>
+                <button className="mini" onClick={() => raise(el.id, 1)} title="Move up">^</button>
+                <button className="mini" onClick={() => raise(el.id, -1)} title="Move down">v</button>
+                <button className="mini" onClick={() => remove(el.id)} title="Remove">x</button>
               </li>
             ))}
-            {design.elements.length === 0 && <li className="empty">Sin elementos</li>}
+            {design.elements.length === 0 && <li className="empty">No elements</li>}
           </ul>
         </aside>
 
@@ -239,11 +240,11 @@ export function App() {
         <aside className="props">
           <Preview design={design} values={values} composer={composer} />
 
-          {!selected && <p className="hint">Selecciona un elemento para configurarlo.</p>}
+          {!selected && <p className="hint">Select an element to configure it.</p>}
 
           {selected?.kind === "asset" && (
             <>
-              <span className="eyebrow">Personalizable</span>
+              <span className="eyebrow">Customizable</span>
               <label className="check">
                 <input
                   type="checkbox"
@@ -252,19 +253,19 @@ export function App() {
                     patch(selected.id, (el) => ({
                       ...(el as AssetElement),
                       choice: e.target.checked
-                        ? { label: "Lenguaje", options: SEED_ASSETS.filter((a) => a.category === "icono").map((a) => a.slug) }
+                        ? { label: "Language", options: SEED_ASSETS.filter((a) => a.category === "icon").map((a) => a.slug) }
                         : undefined,
                     }))
                   }
                 />
-                El cliente elige el icono
+                Let the customer pick the icon
               </label>
 
               {selected.recolor.map((r, i) => (
                 <div key={r.part} className="field">
                   <span className="eyebrow">Color: {r.part}</span>
                   <div className="swatches">
-                    {PALETA.map((c) => {
+                    {PALETTE.map((c) => {
                       const on = r.options.includes(c);
                       return (
                         <button
@@ -272,7 +273,7 @@ export function App() {
                           className="swatch"
                           style={{ background: c }}
                           aria-pressed={on}
-                          title={on ? "Quitar de las opciones" : "Ofrecer este color"}
+                          title={on ? "Remove from the options" : "Offer this color"}
                           onClick={() =>
                             patch(selected.id, (el) => {
                               const a = el as AssetElement;
@@ -288,13 +289,13 @@ export function App() {
                   </div>
                   <p className="hint">
                     {r.options.length === 0
-                      ? "Sin opciones: esta parte queda fija."
-                      : `${r.options.length} colores ofrecidos`}
+                      ? "No options: this part stays fixed."
+                      : `${r.options.length} colors offered`}
                   </p>
                   {r.options.length > 0 && (
                     <>
                       <span className="eyebrow" style={{ marginTop: 8 }}>
-                        Por defecto
+                        Default
                       </span>
                       <div className="swatches">
                         {r.options.map((c) => (
@@ -303,7 +304,7 @@ export function App() {
                             className="swatch small"
                             style={{ background: c }}
                             aria-pressed={r.default === c}
-                            title="Color con el que abre el personalizador"
+                            title="Color the customizer opens with"
                             onClick={() =>
                               patch(selected.id, (el) => {
                                 const a = el as AssetElement;
@@ -320,7 +321,7 @@ export function App() {
                 </div>
               ))}
               {selected.recolor.length === 0 && (
-                <p className="hint">Este asset no declara partes recoloreables.</p>
+                <p className="hint">This asset declares no recolorable parts.</p>
               )}
             </>
           )}
@@ -328,7 +329,7 @@ export function App() {
           {selected?.kind === "text" && (
             <>
               <div className="field">
-                <span className="eyebrow">Etiqueta</span>
+                <span className="eyebrow">Label</span>
                 <input
                   type="text"
                   value={selected.label}
@@ -337,7 +338,7 @@ export function App() {
               </div>
               <div className="field row">
                 <label>
-                  <span className="eyebrow">Max. caracteres</span>
+                  <span className="eyebrow">Max. characters</span>
                   <input
                     type="number"
                     value={selected.maxChars}
@@ -345,7 +346,7 @@ export function App() {
                   />
                 </label>
                 <label>
-                  <span className="eyebrow">Max. lineas</span>
+                  <span className="eyebrow">Max. lines</span>
                   <input
                     type="number"
                     min={1}
@@ -356,9 +357,9 @@ export function App() {
                 </label>
               </div>
               <div className="field">
-                <span className="eyebrow">Color del texto</span>
+                <span className="eyebrow">Text color</span>
                 <div className="swatches">
-                  {PALETA.map((c) => (
+                  {PALETTE.map((c) => (
                     <button
                       key={c}
                       className="swatch"
@@ -370,13 +371,13 @@ export function App() {
                 </div>
               </div>
               <div className="field">
-                <span className="eyebrow">Texto de prueba</span>
+                <span className="eyebrow">Sample text</span>
                 <input
                   type="text"
                   value={values[selected.id] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [selected.id]: e.target.value }))}
                 />
-                <p className="hint">Solo para probar; no se guarda con el diseno.</p>
+                <p className="hint">For previewing only; not saved with the design.</p>
               </div>
             </>
           )}

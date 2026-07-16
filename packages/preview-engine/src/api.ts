@@ -1,13 +1,13 @@
 import type { DesignElement } from "./design";
 
-/** Un diseno tal como vive en D1. `spec` y `safeAngleDeg` salen del producto. */
+/** A design as it lives in D1. `spec` and `safeAngleDeg` come from the product. */
 export interface StoredDesign {
   id: string;
   productId: string;
   name: string;
   slug: string;
   priceCents: number;
-  status: "borrador" | "publicado";
+  status: "draft" | "published";
   baseImageKey: string | null;
   elements: DesignElement[];
 }
@@ -43,7 +43,7 @@ export interface Category {
   title: string;
 }
 
-/** Area imprimible de una variante, en pulgadas. */
+/** Printable area of a variant, in inches. */
 export interface PlacementDimension {
   placement: string;
   width: number;
@@ -77,7 +77,7 @@ export interface CatalogDetail {
   variants: { data?: CatalogVariant[]; paging?: { total: number } } | { error: string };
 }
 
-/** El precio no viene con el producto: vive por variante y por tecnica. */
+/** Price does not ship with the product: it lives per variant and per technique. */
 export interface ProductPrices {
   currency: string;
   variants: Array<{
@@ -87,7 +87,7 @@ export interface ProductPrices {
   discount_tiers?: Array<{ quantity: number; bulk_discount_percentage: number }>;
 }
 
-/** Precio minimo entre variantes: es el "desde $X" de la tarjeta. */
+/** Minimum price across variants: the card's "from $X". */
 export function minPrice(p: ProductPrices): number | null {
   const all = p.variants.flatMap((v) => v.techniques.map((t) => Number(t.price)));
   const ok = all.filter((n) => Number.isFinite(n) && n > 0);
@@ -97,7 +97,7 @@ export function minPrice(p: ProductPrices): number | null {
 export class ApiClient {
   constructor(private base: string) {}
 
-  /** URL a la que mandar al admin para arrancar el OAuth. */
+  /** URL to send the admin to in order to start OAuth. */
   connectUrl() {
     return `${this.base}/api/printful/connect`;
   }
@@ -115,11 +115,11 @@ export class ApiClient {
   }
 
   /**
-   * Trae el catalogo entero.
+   * Fetches the whole catalog.
    *
-   * La API v2 no busca por nombre, solo filtra por categoria/color/tecnica. Con ~500
-   * productos sale mas barato bajarlos todos una vez y filtrar en el navegador que
-   * pegarle a Printful en cada tecla.
+   * The v2 API has no name search, only category/color/technique filters. At ~500
+   * products it is cheaper to pull them all once and filter in the browser than to
+   * hit Printful on every keystroke.
    */
   async fullCatalog(onProgress?: (loaded: number, total: number) => void) {
     const first = await this.catalog(0, 100);

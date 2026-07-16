@@ -12,29 +12,29 @@ import type { AssetLibrary } from "./compose";
 export interface SeedAsset {
   slug: string;
   name: string;
-  category: "icono" | "forma";
+  category: "icon" | "shape";
   svg: string;
-  /** Partes recoloreables declaradas en el SVG (data-recolor). */
+  /** Recolorable parts declared in the SVG (data-recolor). */
   recolorParts: string[];
-  /** ancho/alto del viewBox. El admin coloca los assets con su proporcion real. */
+  /** viewBox width/height. The admin places assets at their real aspect. */
   aspect: number;
 }
 
 /**
- * Libreria semilla mientras el admin y R2 no existan.
+ * Seed library until the admin and R2 exist.
  *
- * Los assets son la unica pieza que se autora a mano en SVG, y por eso son pocos
- * y reutilizables: los disenos se componen con ellos desde el admin, sin tocar XML.
+ * Assets are the only piece authored by hand in SVG, which is why they are few and
+ * reusable: designs are composed from them in the admin, without touching XML.
  */
 const RAW: Array<[string, string, SeedAsset["category"], string]> = [
-  ["code", "Code", "icono", code],
-  ["braces", "Braces", "icono", braces],
-  ["terminal", "Terminal", "icono", terminal],
-  ["serpiente", "Serpiente", "icono", serpiente],
-  ["taza", "Taza", "icono", taza],
-  ["rama", "Rama", "icono", rama],
-  ["hexagono", "Hexagono", "icono", hexagono],
-  ["terminal-window", "Ventana de terminal", "forma", terminalWindow],
+  ["code", "Code", "icon", code],
+  ["braces", "Braces", "icon", braces],
+  ["terminal", "Terminal", "icon", terminal],
+  ["serpiente", "Snake", "icon", serpiente],
+  ["taza", "Mug", "icon", taza],
+  ["rama", "Branch", "icon", rama],
+  ["hexagono", "Hexagon", "icon", hexagono],
+  ["terminal-window", "Terminal window", "shape", terminalWindow],
 ];
 
 function parts(svg: string): string[] {
@@ -57,7 +57,7 @@ export function seedLibrary(): AssetLibrary & { list(): SeedAsset[] } {
   return { getSvg: (slug) => map.get(slug), list: () => SEED_ASSETS };
 }
 
-/** Thumbnail del asset para la UI, sin pasar por la red. */
+/** Asset thumbnail for the UI, without going over the network. */
 export function svgDataUrl(svg: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

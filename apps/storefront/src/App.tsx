@@ -24,7 +24,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
+    img.onerror = () => reject(new Error(`Could not load ${src}`));
     img.src = src;
   });
 }
@@ -68,11 +68,11 @@ export function App() {
         await document.fonts.ready;
         const [photo, published] = await Promise.all([
           loadImage("/tumbler.png"),
-          api.listDesigns("publicado"),
+          api.listDesigns("published"),
         ]);
         if (cancelled) return;
         if (published.length === 0) {
-          setError("Todavia no hay ningun diseno publicado. Publica uno desde el admin.");
+          setError("No design has been published yet. Publish one from the admin.");
           return;
         }
         const stored = published[0];
@@ -121,8 +121,8 @@ export function App() {
     return (
       <div className="wrap">
         <div className="brand">Abbiss</div>
-        <p className="eyebrow" style={{ marginTop: 40 }}>Sin catalogo</p>
-        <h1>Todavia no hay nada que personalizar.</h1>
+        <p className="eyebrow" style={{ marginTop: 40 }}>No catalog</p>
+        <h1>Nothing to customize yet.</h1>
         <p className="lede">{error}</p>
       </div>
     );
@@ -139,11 +139,11 @@ export function App() {
       <div className="brand">Abbiss</div>
 
       <header style={{ marginTop: 40 }}>
-        <p className="eyebrow">Paso 01 &middot; Personaliza</p>
-        <h1>Tu tumbler, con tu nombre.</h1>
+        <p className="eyebrow">Step 01 &middot; Customize</p>
+        <h1>Your tumbler, with your name.</h1>
         <p className="lede">
-          Elige tu lenguaje, ponle color y escribe tu nombre. Lo ves al instante, tal
-          como va a quedar. Sin cuenta, sin registrarte.
+          Pick your language, choose a color and type your name. You see it instantly,
+          exactly as it will look. No account, no sign-up.
         </p>
       </header>
 
@@ -210,8 +210,8 @@ export function App() {
                   />
                   <p className="hint" data-warn={overflow}>
                     {overflow
-                      ? "Se pasa del area segura. Acorta el texto."
-                      : `${(values[el.id] ?? "").length}/${el.maxChars} caracteres`}
+                      ? "This runs past the safe area. Shorten the text."
+                      : `${(values[el.id] ?? "").length}/${el.maxChars} characters`}
                   </p>
                 </div>
               );
@@ -220,15 +220,15 @@ export function App() {
           })}
 
           <button className="cta" disabled={!design || overflow || incompleto}>
-            Agregar al carrito
+            Add to cart
           </button>
 
           <div className="specs">
-            Wine tumbler 11 oz &middot; acero inoxidable
+            Wine tumbler 12 oz &middot; stainless steel
             <br />
-            Impresion 300 dpi &middot; 10.93 x 3.00 in &middot; envoltura 360
+            300 dpi print &middot; 10.58 &times; 3.17 in &middot; {WINE_TUMBLER.wrapDegrees}&deg; wrap
             <br />
-            Area visible de frente: {safePct}% del diseno
+            Visible from the front: {safePct}% of the design
           </div>
         </div>
       </div>

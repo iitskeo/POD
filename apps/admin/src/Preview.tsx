@@ -17,9 +17,9 @@ interface Props {
 }
 
 /**
- * El mismo motor que ve el cliente. Un segundo motor aqui se desincronizaria del
- * storefront en la primera semana y el admin aprobaria algo distinto a lo que se
- * imprime (ver spec 4).
+ * The same engine the customer sees. A second engine here would drift from the
+ * storefront within a week and the admin would approve something other than what
+ * prints (see spec 4).
  */
 export function Preview({ design, values, composer }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,7 +71,7 @@ export function Preview({ design, values, composer }: Props) {
 
   return (
     <div className="preview">
-      <span className="eyebrow">Lo que ve el cliente</span>
+      <span className="eyebrow">What the customer sees</span>
       <div className="preview-stage">
         <canvas ref={canvasRef} />
       </div>

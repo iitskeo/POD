@@ -12,9 +12,9 @@ interface Props {
   api: ApiClient;
 }
 
-const VISIBLES = 48;
+const VISIBLE = 48;
 
-/** categoria -> su raiz, subiendo por parent_id. Un producto cuelga de una hoja. */
+/** category -> its root, walking up parent_id. A product hangs off a leaf. */
 function rootOf(id: number, byId: Map<number, Category>): number {
   let cur = byId.get(id);
   const seen = new Set<number>();
@@ -25,22 +25,22 @@ function rootOf(id: number, byId: Map<number, Category>): number {
   return cur?.id ?? id;
 }
 
-export function Productos({ api }: Props) {
+export function Products({ api }: Props) {
   const [status, setStatus] = useState<PrintfulStatus | null>(null);
   const [items, setItems] = useState<CatalogProduct[] | null>(null);
   const [cats, setCats] = useState<Category[]>([]);
-  const [progreso, setProgreso] = useState({ loaded: 0, total: 0 });
+  const [progress, setProgreso] = useState({ loaded: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
   const [catId, setCatId] = useState<number | null>(null);
-  const [abierto, setAbierto] = useState<CatalogProduct | null>(null);
+  const [opened, setAbierto] = useState<CatalogProduct | null>(null);
 
-  // El precio no viene en el listado: se pide por producto y se cachea.
-  const [precios, setPrecios] = useState<Map<number, number | null>>(new Map());
-  const pidiendo = useRef(new Set<number>());
+  // Price is not in the listing: it is fetched per product and cached.
+  const [prices, setPrecios] = useState<Map<number, number | null>>(new Map());
+  const inFlight = useRef(new Set<number>());
 
-  const [aviso] = useState<string | null>(() => {
+  const [notice] = useState<string | null>(() => {
     const p = new URLSearchParams(location.search);
     const v = p.get("printful");
     if (!v) return null;
@@ -65,7 +65,7 @@ export function Productos({ api }: Props) {
         ]);
         if (cancel) return;
         setCats(cs);
-        // Los descontinuados no se pueden vender: no llegan ni a la lista.
+        // Discontinued products cannot be sold: they never reach the list.
         setItems(all.filter((p) => !p.is_discontinued));
       } catch (e) {
         if (!cancel) setError(e instanceof Error ? e.message : String(e));
@@ -75,10 +75,10 @@ export function Productos({ api }: Props) {
   }, [status?.connected, api]);
 
   const byId = useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
-  const raices = useMemo(() => cats.filter((c) => !c.parent_id), [cats]);
-  const titulo = (id: number) => byId.get(id)?.title ?? `Cat. ${id}`;
+  const roots = useMemo(() => cats.filter((c) => !c.parent_id), [cats]);
+  const titleOf = (id: number) => byId.get(id)?.title ?? `Cat. ${id}`;
 
-  const filtrados = useMemo(() => {
+  const filtered = useMemo(() => {
     if (!items) return [];
     const needle = q.trim().toLowerCase();
     return items
@@ -90,25 +90,25 @@ export function Productos({ api }: Props) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [items, q, catId, byId]);
 
-  const enPantalla = useMemo(() => filtrados.slice(0, VISIBLES), [filtrados]);
+  const onScreen = useMemo(() => filtered.slice(0, VISIBLE), [filtered]);
 
   /**
-   * Pide precios solo de lo que esta en pantalla, de a pocos.
+   * Fetches prices only for what is on screen, a few at a time.
    *
-   * Son 498 productos y una llamada por producto; pedirlos todos quemaria el rate
-   * limit de Printful para no mostrar 490 precios que nadie mira.
+   * It is 498 products and one call each; fetching them all would burn Printful's
+   * rate limit to show 490 prices nobody looks at.
    */
-  const pedirPrecios = useCallback(
+  const fetchPrices = useCallback(
     async (lista: CatalogProduct[]) => {
-      const faltan = lista.filter((p) => !precios.has(p.id) && !pidiendo.current.has(p.id));
-      if (!faltan.length) return;
-      faltan.forEach((p) => pidiendo.current.add(p.id));
+      const missing = lista.filter((p) => !prices.has(p.id) && !inFlight.current.has(p.id));
+      if (!missing.length) return;
+      missing.forEach((p) => inFlight.current.add(p.id));
 
       const POOL = 4;
-      for (let i = 0; i < faltan.length; i += POOL) {
-        const lote = faltan.slice(i, i + POOL);
+      for (let i = 0; i < missing.length; i += POOL) {
+        const batch = missing.slice(i, i + POOL);
         const res = await Promise.all(
-          lote.map((p) =>
+          batch.map((p) =>
             api.productPrices(p.id)
               .then((r) => [p.id, minPrice(r.data)] as const)
               .catch(() => [p.id, null] as const),
@@ -121,16 +121,16 @@ export function Productos({ api }: Props) {
         });
       }
     },
-    [api, precios],
+    [api, prices],
   );
 
   useEffect(() => {
-    if (enPantalla.length) void pedirPrecios(enPantalla);
-  }, [enPantalla, pedirPrecios]);
+    if (onScreen.length) void fetchPrices(onScreen);
+  }, [onScreen, fetchPrices]);
 
-  // Buscar salta a "Todo": buscar "tumbler" dentro de Accessories no devuelve nada
-  // y parece que el buscador esta roto.
-  const buscar = (v: string) => {
+  // Searching jumps to "All": searching "tumbler" inside Accessories returns
+  // nothing and reads as a broken search rather than an empty intersection.
+  const search = (v: string) => {
     setQ(v);
     if (v.trim()) setCatId(null);
   };
@@ -140,7 +140,7 @@ export function Productos({ api }: Props) {
   if (!status.connected) {
     return (
       <div className="connect-card">
-        {aviso && <p className="hint" style={{ marginBottom: 12 }}>{aviso}</p>}
+        {notice && <p className="hint" style={{ marginBottom: 12 }}>{notice}</p>}
         <span className="eyebrow">Provider</span>
         <h2 className="connect-title">Connect your Printful store</h2>
         <p className="hint" style={{ maxWidth: "42ch", marginBottom: 16 }}>
@@ -169,8 +169,8 @@ export function Productos({ api }: Props) {
   if (!items) {
     return (
       <p className="hint">
-        Loading catalog... {progreso.loaded}
-        {progreso.total ? ` / ${progreso.total}` : ""}
+        Loading catalog... {progress.loaded}
+        {progress.total ? ` / ${progress.total}` : ""}
       </p>
     );
   }
@@ -182,14 +182,14 @@ export function Productos({ api }: Props) {
         className="buscador"
         value={q}
         placeholder="Search by name, brand or model..."
-        onChange={(e) => buscar(e.target.value)}
+        onChange={(e) => search(e.target.value)}
       />
 
       <div className="chips">
         <button data-on={catId === null} onClick={() => setCatId(null)}>
           All ({items.length})
         </button>
-        {raices.map((c) => {
+        {roots.map((c) => {
           const n = items.filter((p) => rootOf(p.main_category_id, byId) === c.id).length;
           if (!n) return null;
           return (
@@ -201,13 +201,13 @@ export function Productos({ api }: Props) {
       </div>
 
       <p className="hint">
-        {aviso ? `${aviso} ` : ""}
-        {filtrados.length} of {items.length} products.
+        {notice ? `${notice} ` : ""}
+        {filtered.length} of {items.length} products.
       </p>
 
       <div className="cat-grid">
-        {enPantalla.map((p) => {
-          const precio = precios.get(p.id);
+        {onScreen.map((p) => {
+          const precio = prices.get(p.id);
           return (
             <article className="cat-card" key={p.id}>
               <button className="cat-open" onClick={() => setAbierto(p)} title="Ver detalles">
@@ -215,7 +215,7 @@ export function Productos({ api }: Props) {
                 <h3>{p.name}</h3>
               </button>
               <p className="hint">
-                {p.brand ?? titulo(rootOf(p.main_category_id, byId))} &middot; {p.variant_count} variants
+                {p.brand ?? titleOf(rootOf(p.main_category_id, byId))} &middot; {p.variant_count} variants
               </p>
               <p className="precio">
                 {precio === undefined ? "..." : precio === null ? "no price" : `from $${precio.toFixed(2)}`}
@@ -231,12 +231,12 @@ export function Productos({ api }: Props) {
         })}
       </div>
 
-      {filtrados.length > VISIBLES && (
-        <p className="hint">Showing {VISIBLES}. Narrow the search to see the rest.</p>
+      {filtered.length > VISIBLE && (
+        <p className="hint">Showing {VISIBLE}. Narrow the search to see the rest.</p>
       )}
-      {filtrados.length === 0 && <p className="hint">Nothing matches that search.</p>}
+      {filtered.length === 0 && <p className="hint">Nothing matches that search.</p>}
 
-      {abierto && <ProductDetail api={api} product={abierto} onClose={() => setAbierto(null)} />}
+      {opened && <ProductDetail api={api} product={opened} onClose={() => setAbierto(null)} />}
     </div>
   );
 }

@@ -15,12 +15,12 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string) {
 export interface RenderInput {
   profile: Profile;
   band: PrintBand;
-  /** Arte plano: el archivo de impresion completo. */
+  /** Flat art: the complete print file. */
   art: TexImageSource;
-  /** Grados del producto que cubre el ancho del arte. 360 = vuelta completa. */
+  /** Degrees of the product covered by the art's width. 360 = full turn. */
   wrapDegrees: number;
   calibration?: Calibration;
-  /** Dibuja la guia de zona segura. Solo el admin la usa. */
+  /** Draws the safe zone guide. Only the admin uses it. */
   showSafeZone?: boolean;
 }
 
@@ -33,18 +33,18 @@ export class PreviewRenderer {
   private uniforms: Record<string, WebGLUniformLocation | null> = {};
 
   constructor(canvas: HTMLCanvasElement, photo: TexImageSource) {
-    // preserveDrawingBuffer: el preview aprobado se guarda con la orden (spec 5),
-    // asi que el buffer tiene que seguir legible despues de componer.
+    // preserveDrawingBuffer: the approved preview is stored with the order (spec 5),
+    // so the buffer has to stay readable after compositing.
     const gl = canvas.getContext("webgl2", {
       antialias: true,
       preserveDrawingBuffer: true,
     });
-    if (!gl) throw new Error("WebGL2 no disponible");
+    if (!gl) throw new Error("WebGL2 is not available");
     this.gl = gl;
 
-    // R32F para R(y): el radio se guarda en px, no normalizado.
+    // R32F for R(y): the radius is stored in px, not normalized.
     if (!gl.getExtension("EXT_color_buffer_float")) {
-      // Solo hace falta para render-to-float; muestrear R32F es core en WebGL2.
+      // Only needed for render-to-float; sampling R32F is core in WebGL2.
     }
 
     const program = gl.createProgram()!;
@@ -103,7 +103,7 @@ export class PreviewRenderer {
       gl.RED, gl.FLOAT, profile.radii);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    // NEAREST: R(y) es una tabla por fila, interpolarla no aporta.
+    // NEAREST: R(y) is a per-row table; interpolating it adds nothing.
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   }
@@ -114,16 +114,16 @@ export class PreviewRenderer {
     const cal = input.calibration ?? DEFAULT_CALIBRATION;
 
     gl.bindTexture(gl.TEXTURE_2D, this.artTex);
-    // Premultiplicado obligatorio: al generar mipmaps cada texel se promedia con
-    // sus vecinos transparentes (rgb=0, a=0). Con alfa recto eso hunde el alfa y
-    // los trazos finos desaparecen; con premultiplicado el promedio es correcto.
+    // Premultiply is required: generating mipmaps averages each texel with its
+    // transparent neighbours (rgb=0, a=0). With straight alpha that sinks the alpha
+    // and thin strokes vanish; premultiplied, the average is correct.
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, input.art);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    // Mipmaps: hacia los bordes la compresion es extrema y sin ellos aliasea.
+    // Mipmaps: compression is extreme toward the edges and aliases without them.
     gl.generateMipmap(gl.TEXTURE_2D);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
 

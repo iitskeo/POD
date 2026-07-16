@@ -1,6 +1,6 @@
 import type { PrintSpec } from "./types";
 
-/** Rectangulo en coordenadas del archivo de impresion (px del spec). */
+/** Rectangle in print file coordinates (spec px). */
 export interface Rect {
   x: number;
   y: number;
@@ -8,20 +8,20 @@ export interface Rect {
   h: number;
 }
 
-/** Deja que el cliente elija que asset va en este hueco, de un set curado. */
+/** Lets the customer pick which asset fills this slot, from a curated set. */
 export interface ChoiceSlot {
   label: string;
-  /** slugs de la libreria. */
+  /** Library slugs. */
   options: string[];
 }
 
 /**
- * Recolorea una parte del SVG del asset (las marcadas con data-recolor).
- * Opciones fijas definidas por el admin, nunca un picker libre: es lo que hace
- * que la regla de un solo acento por composicion no se pueda romper.
+ * Recolors a part of the asset's SVG (those marked with data-recolor).
+ * Fixed options defined by the admin, never a free picker: this is what makes the
+ * one-accent-per-composition rule unbreakable.
  */
 export interface RecolorSlot {
-  /** valor de data-recolor dentro del SVG del asset. */
+  /** data-recolor value inside the asset's SVG. */
   part: string;
   label: string;
   options: string[];
@@ -32,9 +32,9 @@ export interface AssetElement {
   id: string;
   kind: "asset";
   rect: Rect;
-  /** Asset por defecto, y el unico si no hay choice. */
+  /** Default asset, and the only one when there is no choice. */
   slug: string;
-  /** Si falta, el asset es fijo y el cliente no lo cambia. */
+  /** When absent, the asset is fixed and the customer cannot change it. */
   choice?: ChoiceSlot;
   recolor: RecolorSlot[];
 }
@@ -45,17 +45,17 @@ export interface TextElement {
   rect: Rect;
   label: string;
   maxChars: number;
-  /** Minimo legible como fraccion del alto del archivo. */
+  /** Minimum legible size as a fraction of the file height. */
   minSizeFrac: number;
   maxLines: number;
   color: string;
   fontFamily: string;
   placeholder: string;
-  /** Si está, el texto es fijo y el cliente no lo edita. */
+  /** When set, the text is fixed and the customer cannot edit it. */
   fixed?: string;
 }
 
-/** Reservado. Exige recorte de fondo; fuera de alcance de la etapa 1. */
+/** Reserved. Needs background removal; out of scope for stage 1. */
 export interface PhotoElement {
   id: string;
   kind: "photo";
@@ -65,21 +65,26 @@ export interface PhotoElement {
 
 export type DesignElement = AssetElement | TextElement | PhotoElement;
 
+/** Human label for an element, whatever its kind. */
+export function elementLabel(el: DesignElement): string {
+  return el.kind === "asset" ? el.slug : el.label;
+}
+
 export interface Design {
   id: string;
   name: string;
   spec: PrintSpec;
-  /** Angulo visible legible. Define el ancho utilizable del archivo. */
+  /** Legible visible angle. Defines the usable width of the file. */
   safeAngleDeg: number;
-  /** Arte fijo de fondo. Siempre se imprime tal cual; nunca es personalizable. */
+  /** Fixed background art. Always printed as-is; never customizable. */
   baseImage?: string;
-  /** Se dibujan en orden. El primero queda al fondo. */
+  /** Drawn in order. The first one sits at the back. */
   elements: DesignElement[];
 }
 
 /**
- * Valores elegidos por el cliente.
- * Claves: `<elementId>` para choice y text, `<elementId>.<part>` para recolor.
+ * Values chosen by the customer.
+ * Keys: `<elementId>` for choice and text, `<elementId>.<part>` for recolor.
  */
 export type SlotValues = Record<string, string>;
 
@@ -97,18 +102,18 @@ export function defaultValues(design: Design): SlotValues {
 }
 
 /**
- * Fraccion del ancho del archivo que se ve de frente.
+ * Fraction of the file width that is visible from the front.
  *
- * El archivo cubre `wrapDegrees` del producto; de esos, solo son legibles los
- * `2*safeAngleDeg` centrales. Si el archivo envuelve menos que la zona legible,
- * se ve entero.
+ * The file covers `wrapDegrees` of the product; of those, only the middle
+ * `2*safeAngleDeg` are legible. If the file wraps less than the legible zone, all of
+ * it shows.
  */
 export function safeWidthFrac(safeAngleDeg: number, wrapDegrees: number | null): number {
-  if (!wrapDegrees) return 1; // superficie plana: no hay curvatura que recorte
+  if (!wrapDegrees) return 1; // flat surface: no curvature to clip it
   return Math.min(1, (2 * safeAngleDeg) / wrapDegrees);
 }
 
-/** Rectangulo de la zona segura, en coordenadas del archivo. */
+/** Safe zone rectangle, in file coordinates. */
 export function safeRect(design: Design): Rect {
   const w = design.spec.widthPx * safeWidthFrac(design.safeAngleDeg, design.spec.wrapDegrees);
   return { x: (design.spec.widthPx - w) / 2, y: 0, w, h: design.spec.heightPx };

@@ -8,13 +8,13 @@ export interface StoreRow {
   id: string;
   external_id: string | null;
   name: string | null;
-  /** Mutable: `call` lo actualiza al renovar. */
+  /** Mutable: `call` updates it on refresh. */
   access_token: string;
   refresh_token: string | null;
   expires_at: number | null;
 }
 
-/** Categoria del catalogo de Printful. */
+/** A Printful catalog category. */
 export interface Category {
   id: number;
   parent_id: number | null;
@@ -53,17 +53,17 @@ export async function exchangeCode(env: Env, code: string): Promise<TokenRespons
   });
   const body = (await res.json()) as Record<string, unknown>;
   if (!res.ok) {
-    throw new Error(`Printful rechazo el code: ${JSON.stringify(body).slice(0, 300)}`);
+    throw new Error(`Printful rejected the code: ${JSON.stringify(body).slice(0, 300)}`);
   }
-  // Printful envuelve algunas respuestas en { result: ... }; otras no.
+  // Printful wraps some responses in { result: ... }; others not.
   const data = (body.result ?? body) as TokenResponse;
-  if (!data.access_token) throw new Error("Printful no devolvio access_token");
+  if (!data.access_token) throw new Error("Printful returned no access_token");
   return data;
 }
 
 async function refresh(env: Env, store: StoreRow): Promise<string> {
   if (!store.refresh_token) {
-    throw new Error("El token expiro y no hay refresh_token. Vuelve a conectar Printful.");
+    throw new Error("The token expired and there is no refresh_token. Reconnect Printful.");
   }
   const res = await fetch(TOKEN_URL, {
     method: "POST",
@@ -77,10 +77,10 @@ async function refresh(env: Env, store: StoreRow): Promise<string> {
   });
   const body = (await res.json()) as Record<string, unknown>;
   if (!res.ok) {
-    throw new Error(`No se pudo renovar el token: ${JSON.stringify(body).slice(0, 200)}`);
+    throw new Error(`Could not refresh the token: ${JSON.stringify(body).slice(0, 200)}`);
   }
   const tok = (body.result ?? body) as TokenResponse;
-  if (!tok.access_token) throw new Error("El refresh no devolvio access_token");
+  if (!tok.access_token) throw new Error("The refresh returned no access_token");
 
   const now = Date.now();
   await env.DB.prepare(
@@ -105,20 +105,20 @@ async function raw(token: string, path: string) {
 }
 
 /**
- * Llama a la API de Printful, renovando el token si hace falta.
+ * Calls the Printful API, refreshing the token when needed.
  *
- * Los tokens de Printful expiran. Sin esto la conexion funciona un rato y luego
- * empieza a dar 401 sin explicacion: hay que reconectar a mano cada vez.
+ * Printful tokens expire. Without this the connection works for a while and then
+ * starts returning 401 with no explanation, needing a manual reconnect every time.
  */
 export async function call<T>(env: Env, store: StoreRow, path: string): Promise<T> {
-  // Renovacion preventiva: 60s de margen para no pelear con el reloj.
+  // Preemptive refresh: 60s of slack so we do not race the clock.
   if (store.expires_at && store.expires_at - 60_000 < Date.now()) {
     await refresh(env, store);
   }
 
   let { res, body } = await raw(store.access_token, path);
 
-  // Reactiva: expires_at puede faltar o mentir, y el 401 es la unica verdad.
+  // Reactive: expires_at can be missing or wrong, and the 401 is the only truth.
   if (res.status === 401) {
     await refresh(env, store);
     ({ res, body } = await raw(store.access_token, path));
@@ -145,9 +145,7 @@ export interface CatalogPage {
   paging?: { total: number; offset: number; limit: number };
 }
 
-/**
- * Regiones de venta validas de Printful. Ojo: no existe "usa", es "north_america".
- */
+/** Valid Printful selling regions. Note there is no "usa": it is "north_america". */
 export const SELLING_REGIONS = [
   "worldwide", "north_america", "canada", "europe", "spain", "latvia", "uk",
   "france", "germany", "australia", "japan", "new_zealand", "italy", "brazil",
@@ -159,11 +157,11 @@ export function catalogPath(params: URLSearchParams): string {
   q.set("limit", params.get("limit") ?? "20");
   q.set("offset", params.get("offset") ?? "0");
 
-  // La doc dice que tiene default "worldwide", pero la API responde
-  // "Selling region not found" si no viaja explicito. Se manda siempre.
+  // The docs claim it defaults to "worldwide", but the API answers
+  // "Selling region not found" unless it travels explicitly. Always send it.
   const region = params.get("selling_region_name") ?? "worldwide";
   if (!(SELLING_REGIONS as readonly string[]).includes(region)) {
-    throw new Error(`Region invalida: ${region}. Validas: ${SELLING_REGIONS.join(", ")}`);
+    throw new Error(`Invalid region: ${region}. Valid: ${SELLING_REGIONS.join(", ")}`);
   }
   q.set("selling_region_name", region);
 

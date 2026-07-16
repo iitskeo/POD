@@ -8,7 +8,7 @@ VALUES (
   'wine-tumbler-11oz',
   'Wine Tumbler 11oz',
   'wine-tumbler-11oz',
-  'publicado',
+  'published',
   'printify',
   NULL,
   NULL,

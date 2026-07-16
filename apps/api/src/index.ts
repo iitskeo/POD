@@ -1,12 +1,12 @@
 export interface Env {
   DB: D1Database;
-  /** Origenes permitidos, separados por coma. */
+  /** Allowed origins, comma separated. */
   ALLOWED_ORIGINS?: string;
-  /** Credenciales de la app de Printful. Viven en .dev.vars, nunca en el codigo. */
+  /** Printful app credentials. They live in .dev.vars, never in the code. */
   PRINTFUL_CLIENT_ID: string;
   PRINTFUL_CLIENT_SECRET: string;
   PRINTFUL_REDIRECT_URI?: string;
-  /** A donde vuelve el admin tras conectar. */
+  /** Where the admin returns to after connecting. */
   ADMIN_URL?: string;
 }
 
@@ -45,8 +45,8 @@ async function currentStore(env: Env): Promise<StoreRow | null> {
 }
 
 /**
- * Rutas de Printful. El token nunca sale de aqui: el admin pregunta por catalogo
- * y el Worker responde ya autenticado.
+ * Printful routes. The token never leaves here: the admin asks for the catalog and
+ * the Worker answers already authenticated.
  */
 async function printfulRoutes(
   path: string,
@@ -65,7 +65,7 @@ async function printfulRoutes(
     );
   }
 
-  // Arranca el handshake. El state se guarda para verificarlo al volver.
+  // Starts the handshake. The state is stored so it can be verified on return.
   if (path === "/api/printful/connect") {
     const state = crypto.randomUUID();
     await env.DB.prepare("INSERT INTO oauth_states (state, created_at) VALUES (?, ?)")
@@ -77,15 +77,15 @@ async function printfulRoutes(
     const admin = env.ADMIN_URL ?? "http://localhost:5174";
     const back = (params: string) => Response.redirect(`${admin}/?${params}`, 302);
 
-    if (url.searchParams.get("success") === "0") return back("printful=rechazado");
+    if (url.searchParams.get("success") === "0") return back("printful=rejected");
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    if (!code || !state) return back("printful=error&msg=faltan+parametros");
+    if (!code || !state) return back("printful=error&msg=missing+parameters");
 
-    // Sin verificar el state, el callback aceptaria cualquier code que le manden.
+    // Without verifying the state, the callback would accept any code sent to it.
     const row = await env.DB.prepare("SELECT state FROM oauth_states WHERE state = ?")
       .bind(state).first();
-    if (!row) return back("printful=error&msg=state+invalido");
+    if (!row) return back("printful=error&msg=invalid+state");
     await env.DB.prepare("DELETE FROM oauth_states WHERE state = ?").bind(state).run();
 
     try {
@@ -107,7 +107,7 @@ async function printfulRoutes(
         tok.expires_in ? now + tok.expires_in * 1000 : null,
         now,
       ).run();
-      return back("printful=conectado");
+      return back("printful=connected");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return back(`printful=error&msg=${encodeURIComponent(msg.slice(0, 120))}`);
@@ -115,10 +115,10 @@ async function printfulRoutes(
   }
 
   const store = await currentStore(env);
-  if (!store) return json({ error: "Printful no esta conectado" }, { status: 409 }, headers);
+  if (!store) return json({ error: "Printful is not connected" }, { status: 409 }, headers);
 
   if (path === "/api/printful/categories") {
-    // Sin limit devuelve solo 20 y el arbol queda cortado.
+    // Without limit it returns only 20 and the tree comes back truncated.
     const data = await call<unknown>(env, store, "/v2/catalog-categories?limit=100");
     return json(data, {}, headers);
   }
@@ -128,12 +128,12 @@ async function printfulRoutes(
     return json(data, {}, headers);
   }
 
-  // Todo el catalogo v2 exige la region, no solo el listado.
+  // The whole v2 catalog requires the region, not just the listing.
   const region = url.searchParams.get("selling_region_name") ?? "worldwide";
   const rq = `selling_region_name=${encodeURIComponent(region)}`;
 
-  // Precios aparte: el listado no los trae y pedirlos para los 498 seria inviable.
-  // Se piden solo para lo que el admin esta mirando.
+  // Prices are separate: the listing does not carry them and asking for all 498 would
+  // be unworkable. Only what the admin is looking at gets fetched.
   const prices = path.match(/^\/api\/printful\/catalog\/(\d+)\/prices$/);
   if (prices) {
     const data = await call<unknown>(env, store, `/v2/catalog-products/${prices[1]}/prices?${rq}`);
@@ -155,8 +155,8 @@ async function printfulRoutes(
   const detail = path.match(/^\/api\/printful\/catalog\/(\d+)$/);
   if (detail) {
     const id = detail[1];
-    // mockup-styles trae print_area_width/height: las medidas del template, que es
-    // justo lo que hoy esta hardcodeado.
+    // mockup-styles carries print_area_width/height: the template measurements, which
+    // is exactly what is hardcoded today.
     const [product, styles, variants] = await Promise.all([
       call<unknown>(env, store, `/v2/catalog-products/${id}?${rq}`),
       call<unknown>(env, store, `/v2/catalog-products/${id}/mockup-styles?${rq}`).catch((e) => ({
@@ -170,7 +170,7 @@ async function printfulRoutes(
     return json({ product, styles, variants }, {}, headers);
   }
 
-  return json({ error: "ruta printful no encontrada" }, { status: 404 }, headers);
+  return json({ error: "printful route not found" }, { status: 404 }, headers);
 }
 
 interface DesignRow {
@@ -226,7 +226,7 @@ export default {
         if (req.method === "GET") {
           const row = await env.DB.prepare("SELECT * FROM designs WHERE id = ?")
             .bind(id).first<DesignRow>();
-          if (!row) return json({ error: "no existe" }, { status: 404 }, headers);
+          if (!row) return json({ error: "not found" }, { status: 404 }, headers);
           return json(rowToDesign(row), {}, headers);
         }
         if (req.method === "PUT") {
@@ -244,7 +244,7 @@ export default {
           ).bind(
             id,
             String(body.productId ?? ""),
-            String(body.name ?? "Sin nombre"),
+            String(body.name ?? "Untitled"),
             String(body.slug ?? id),
             Number(body.priceCents ?? 0),
             String(body.status ?? "borrador"),
@@ -262,7 +262,7 @@ export default {
         }
       }
 
-      return json({ error: "ruta no encontrada" }, { status: 404 }, headers);
+      return json({ error: "route not found" }, { status: 404 }, headers);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return json({ error: msg }, { status: 500 }, headers);

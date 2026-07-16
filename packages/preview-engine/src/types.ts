@@ -1,56 +1,56 @@
-/** Perfil R(y) de un solido de revolucion, extraido de la silueta de la foto. */
+/** R(y) profile of a solid of revolution, extracted from the photo's silhouette. */
 export interface Profile {
-  /** Primera fila del cuerpo imprimible (por debajo de la tapa). */
+  /** First row of the printable body (below the lid). */
   yTop: number;
-  /** Ultima fila del cuerpo. */
+  /** Last row of the body. */
   yBot: number;
-  /** Eje de revolucion en px. */
+  /** Axis of revolution, in px. */
   cx: number;
-  /** Radio maximo en px. Da la escala: 2*Rmax equivale al diametro fisico. */
+  /** Max radius in px. Sets the scale: 2*rMax equals the physical diameter. */
   rMax: number;
-  /** Radio por fila, indexado por y absoluto. 0 fuera del cuerpo. */
+  /** Radius per row, indexed by absolute y. 0 outside the body. */
   radii: Float32Array;
   width: number;
   height: number;
 }
 
-/** Medidas del archivo de impresion, tomadas del template del proveedor. */
+/** Print file measurements, taken from the provider's template. */
 export interface PrintSpec {
   widthPx: number;
   heightPx: number;
   dpi: number;
   /**
-   * Cuantos grados del producto cubre el ancho del archivo.
+   * How many degrees of the product the file's width covers.
    *
-   * No es un si/no. El Wine Tumbler envuelve ~360 pero una taza con asa solo ~320:
-   * su area imprimible son 9in sobre ~10in de circunferencia. Tratarlo como booleano
-   * mapeaba mal todo lo que no diera la vuelta completa.
+   * Not a yes/no. The Wine Tumbler wraps ~360 but a mug with a handle only ~320: its
+   * print area is 9in over a ~10in circumference. As a boolean, anything short of a
+   * full turn was mapped wrong.
    *
-   * 360 en un cilindro cerrado; menos cuando el asa o una costura se comen el resto.
-   * En superficies planas (camisetas) no aplica: usar `null`.
+   * 360 on a closed cylinder; less when a handle or seam eats the rest. Flat surfaces
+   * (tees) do not apply: use `null`.
    */
   wrapDegrees: number | null;
-  /** Margen de sangrado del proveedor, en px del archivo. */
+  /** Provider bleed margin, in file px. */
   bleedPx: number;
 }
 
-/** Grados que cubre un archivo de `widthIn` sobre un producto de `diameterIn`. */
+/** Degrees a `widthIn` file covers on a product of `diameterIn`. */
 export function wrapDegreesFor(widthIn: number, diameterIn: number): number {
   return Math.min(360, (widthIn / (Math.PI * diameterIn)) * 360);
 }
 
-/** Banda imprimible sobre la foto. La silueta no la da: el admin la marca. */
+/** Printable band over the photo. The silhouette does not give it: the admin marks it. */
 export interface PrintBand {
-  /** Fila donde empieza la banda. */
+  /** Row where the band starts. */
   yStart: number;
-  /** Alto de la banda en px de la foto. Deriva de printSpec y la escala. */
+  /** Band height in photo px. Derived from printSpec and the scale. */
   height: number;
 }
 
 export interface Calibration {
-  /** Fuerza del multiply de shading. 1 = la foto tal cual. */
+  /** Strength of the shading multiply. 1 = the photo as-is. */
   shadingStrength: number;
-  /** Angulo maximo considerado legible. Define la zona segura. */
+  /** Max angle considered legible. Defines the safe zone. */
   safeAngleDeg: number;
 }
 
@@ -60,19 +60,19 @@ export const DEFAULT_CALIBRATION: Calibration = {
 };
 
 /**
- * Wine Tumbler de Printful (12oz, tecnica UV).
+ * Printful's Wine Tumbler (12oz, UV technique).
  *
- * Medidas leidas de la API: 10.58 x 3.17 in a 300 dpi. Ojo: el mismo producto en
- * Printify traia 10.93 x 3.00 in por sublimacion. El spec pertenece al proveedor,
- * no al producto, y por eso lo trae el import.
+ * Measurements read from the API: 10.58 x 3.17 in at 300 dpi. Note the same product on
+ * Printify came as 10.93 x 3.00 in via sublimation. The spec belongs to the provider,
+ * not the product, which is why the import carries it.
  *
- * Semilla hasta que el import de Printful exista.
+ * Seed until the Printful import exists.
  */
 export const WINE_TUMBLER: PrintSpec = {
   widthPx: 3175,
   heightPx: 950,
   dpi: 300,
-  // 10.58in sobre un vaso de ~3.37in de diametro: da casi la vuelta completa.
+  // 10.58in on a ~3.37in diameter cup: very nearly a full turn.
   wrapDegrees: 360,
   bleedPx: 57,
 };

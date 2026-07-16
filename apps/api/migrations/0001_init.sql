@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS products (
   id                  TEXT PRIMARY KEY,
   name                TEXT NOT NULL,
   slug                TEXT NOT NULL UNIQUE,
-  status              TEXT NOT NULL DEFAULT 'borrador',
+  status              TEXT NOT NULL DEFAULT 'draft',
   source              TEXT NOT NULL DEFAULT 'manual',
   external_product_id TEXT,
   external_variant_id TEXT,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS designs (
   name        TEXT NOT NULL,
   slug        TEXT NOT NULL UNIQUE,
   price_cents INTEGER NOT NULL DEFAULT 0,
-  status      TEXT NOT NULL DEFAULT 'borrador',
+  status      TEXT NOT NULL DEFAULT 'draft',
   base_image_key TEXT,
   -- JSON: elementos colocados (asset / text / photo) con su geometria y slots.
   elements    TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_designs_status ON designs(status);
 
 CREATE TABLE IF NOT EXISTS orders (
   id         TEXT PRIMARY KEY,
-  status     TEXT NOT NULL DEFAULT 'pendiente_pago',
+  status     TEXT NOT NULL DEFAULT 'pending_payment',
   customer   TEXT NOT NULL,
   shipping   TEXT NOT NULL,
   total_cents INTEGER NOT NULL,

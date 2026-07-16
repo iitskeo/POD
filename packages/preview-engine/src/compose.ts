@@ -2,7 +2,7 @@ import type { Design, SlotValues, TextElement } from "./design";
 import { safeRect } from "./design";
 
 export interface AssetLibrary {
-  /** slug -> fuente SVG del asset. Fuente, no imagen: hay que recolorear antes. */
+  /** slug -> the asset's SVG source. Source, not image: it must be recolored first. */
   getSvg(slug: string): string | undefined;
 }
 
@@ -11,14 +11,14 @@ function rasterize(svg: string, w: number, h: number): Promise<HTMLImageElement>
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("SVG invalido")); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Invalid SVG")); };
     img.width = w;
     img.height = h;
     img.src = url;
   });
 }
 
-/** Aplica los colores a las partes marcadas con data-recolor. */
+/** Applies the colors to the parts marked with data-recolor. */
 function recolor(svg: string, colors: Record<string, string>): string {
   if (Object.keys(colors).length === 0) return svg;
   const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
@@ -38,8 +38,8 @@ interface FittedText {
 }
 
 /**
- * Ajusta el texto con tamano minimo. Encoger sin limite deja los nombres largos
- * ilegibles (lo mostro el spike); al tocar el minimo se parte en lineas.
+ * Fits text with a minimum size. Shrinking without a floor leaves long names
+ * illegible (the spike showed this); at the floor it breaks into lines.
  */
 export function fitText(
   ctx: CanvasRenderingContext2D,
@@ -73,11 +73,11 @@ function splitLines(text: string, count: number): string[] {
 }
 
 /**
- * Dibuja el archivo de impresion plano.
+ * Draws the flat print file.
  *
- * Misma llamada para el preview (escala baja) y para la imprenta (escala 1 = 300
- * DPI). Que sea el mismo codigo es lo que garantiza que lo impreso coincide con lo
- * que el cliente aprobo.
+ * Same call for the preview (low scale) and for the printer (scale 1 = 300 DPI).
+ * Being the same code is what guarantees that what prints matches what the customer
+ * approved.
  */
 export class DesignComposer {
   private cache = new Map<string, HTMLImageElement>();
@@ -88,10 +88,10 @@ export class DesignComposer {
   }
 
   /**
-   * Rasteriza un asset ya recoloreado, con cache.
+   * Rasterizes an already-recolored asset, with cache.
    *
-   * Recolorear obliga a re-rasterizar, que es caro; escribir texto no. Sin cache,
-   * cada tecla rasterizaria todos los assets del diseno.
+   * Recoloring forces a re-rasterize, which is expensive; typing text does not.
+   * Without the cache every keystroke would rasterize every asset in the design.
    */
   private async raster(slug: string, colors: Record<string, string>, w: number, h: number) {
     const key = `${slug}|${w}x${h}|${JSON.stringify(colors)}`;
@@ -135,7 +135,7 @@ export class DesignComposer {
       } else if (el.kind === "text") {
         const text = (el.fixed ?? values[el.id] ?? "").trim();
         if (!text) continue;
-        // El texto no puede salirse de la zona segura aunque su caja sea mas ancha.
+        // Text cannot escape the safe zone even if its box is wider.
         const left = Math.max(box.x, safe.x * scale);
         const right = Math.min(box.x + box.w, (safe.x + safe.w) * scale);
         const maxW = Math.max(right - left, 1);

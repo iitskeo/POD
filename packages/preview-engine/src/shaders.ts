@@ -7,15 +7,15 @@ void main() {
 }`;
 
 /**
- * Mapeo cilindrico exacto + shading por multiply.
+ * Exact cylindrical mapping + shading by multiply.
  *
- * No hay displacement map: en un solido de revolucion la geometria se conoce.
+ * No displacement map: on a solid of revolution the geometry is known.
  *   x = cx + R(y) * sin(theta)  ->  theta = asin((x - cx) / R(y))
- *   u = theta / 2pi + 0.5
- * La compresion hacia los bordes sale sola de la derivada de asin.
+ *   u = theta / wrap + 0.5
+ * The compression toward the edges falls out of asin's derivative.
  *
- * El shading es la propia foto: sobre un cuerpo blanco, su luminancia ES la
- * iluminacion. Multiplicar el arte por ella lo asienta en la superficie.
+ * The shading is the photo itself: on a white body its luminance IS the lighting.
+ * Multiplying the art by it seats the art on the surface.
  */
 export const FRAGMENT_SRC = `#version 300 es
 precision highp float;
@@ -25,16 +25,16 @@ out vec4 outColor;
 
 uniform sampler2D u_photo;
 uniform sampler2D u_art;
-uniform sampler2D u_radii;   // R32F, una columna: R(y) en px
+uniform sampler2D u_radii;   // R32F, one column: R(y) in px
 
 uniform vec2  u_photoSize;
 uniform float u_cx;
-uniform float u_yStart;      // primera fila de la banda imprimible
-uniform float u_yEnd;        // ultima fila
-uniform float u_shading;     // 0 = sin shading, 1 = foto tal cual
-uniform float u_safeSin;     // sin(safeAngle): limite de la zona segura
-uniform float u_showSafe;    // 1 = dibuja la guia de zona segura (admin)
-uniform float u_wrapRad;     // radianes del producto que cubre el ancho del archivo
+uniform float u_yStart;      // first row of the printable band
+uniform float u_yEnd;        // last row
+uniform float u_shading;     // 0 = no shading, 1 = the photo as-is
+uniform float u_safeSin;     // sin(safeAngle): safe zone limit
+uniform float u_showSafe;    // 1 = draw the safe zone guide (admin)
+uniform float u_wrapRad;     // radians of the product covered by the file width
 
 const float PI = 3.14159265359;
 
@@ -49,20 +49,20 @@ void main() {
   if (r < 1.0) return;
 
   float s = (px.x - u_cx) / r;
-  if (abs(s) >= 1.0) return;           // fuera de la silueta
+  if (abs(s) >= 1.0) return;           // outside the silhouette
 
-  float theta = asin(s);               // cara frontal: -pi/2 .. pi/2
+  float theta = asin(s);               // front face: -pi/2 .. pi/2
 
-  // El archivo cubre u_wrapRad del producto, no siempre la vuelta entera: una taza
-  // con asa imprime ~320 grados. Fuera de esa banda no hay arte que dibujar.
+  // The file covers u_wrapRad of the product, not always a full turn: a mug with a
+  // handle prints ~320 degrees. Outside that band there is no art to draw.
   if (abs(theta) > u_wrapRad * 0.5) return;
   float u = theta / u_wrapRad + 0.5;
   float v = (px.y - u_yStart) / (u_yEnd - u_yStart);
 
-  // art viene premultiplicado: art.rgb ya esta multiplicado por art.a.
+  // art arrives premultiplied: art.rgb is already multiplied by art.a.
   vec4 art = texture(u_art, vec2(u, v));
 
-  // El arte recibe la iluminacion exacta de la foto.
+  // The art receives the photo's exact lighting.
   vec3 shade = mix(vec3(1.0), photo.rgb, u_shading);
   vec3 color = photo.rgb * (1.0 - art.a) + art.rgb * shade;
 

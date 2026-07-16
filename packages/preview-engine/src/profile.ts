@@ -1,13 +1,13 @@
 import type { Profile } from "./types";
 
 export interface ProfileOptions {
-  /** Distancia de color al fondo para considerar que hay objeto. */
+  /** Color distance from the background to count as object. */
   bgThreshold: number;
-  /** Luminancia minima del cuerpo imprimible (blanco). */
+  /** Minimum luminance of the printable body (white). */
   bodyLuma: number;
-  /** Saturacion maxima del cuerpo (descarta la tapa metalica). */
+  /** Maximum saturation of the body (rejects the metal lid). */
   bodySat: number;
-  /** Fraccion de pixeles blancos que debe tener una fila del cuerpo. */
+  /** Fraction of white pixels a body row must have. */
   bodyWhiteFrac: number;
 }
 
@@ -19,11 +19,11 @@ export const DEFAULT_PROFILE_OPTIONS: ProfileOptions = {
 };
 
 /**
- * Extrae R(y) de la silueta del producto contra el fondo.
+ * Extracts R(y) from the product's silhouette against the background.
  *
- * En un solido de revolucion la silueta ES el perfil: el borde visible es el
- * punto de tangencia, asi que su distancia al eje es el radio a esa altura.
- * Por eso la geometria no se deriva de la luminancia (ver spec 4.2.1).
+ * On a solid of revolution the silhouette IS the profile: the visible edge is the
+ * tangency point, so its distance to the axis is the radius at that height. This is
+ * why the geometry is not derived from luminance (see spec 4.2.1).
  */
 export function extractProfile(
   img: ImageData,
@@ -31,7 +31,7 @@ export function extractProfile(
 ): Profile {
   const { width, height, data } = img;
 
-  // El fondo se muestrea en la esquina: los mockups de proveedor son fondo plano.
+  // Background is sampled from the corner: provider mockups use a flat backdrop.
   let br = 0, bg = 0, bb = 0, n = 0;
   for (let y = 0; y < 8; y++) {
     for (let x = 0; x < 8; x++) {
@@ -57,8 +57,8 @@ export function extractProfile(
     }
   }
 
-  // Filas del cuerpo: mayoritariamente blancas y suficientemente anchas.
-  // Esto separa el cuerpo imprimible de la tapa de acero.
+  // Body rows: mostly white and wide enough. This separates the printable body
+  // from the steel lid.
   const bodyRows: number[] = [];
   for (let y = 0; y < height; y++) {
     let obj = 0, wht = 0, minX = -1, maxX = -1;
@@ -70,16 +70,16 @@ export function extractProfile(
     if (obj < 4) continue;
     if (wht / obj > opts.bodyWhiteFrac && maxX - minX > width * 0.25) bodyRows.push(y);
   }
-  if (bodyRows.length === 0) throw new Error("No se detecto el cuerpo del producto");
+  if (bodyRows.length === 0) throw new Error("Could not detect the product body");
 
   const yTop = bodyRows[0];
   const yBot = bodyRows[bodyRows.length - 1];
 
-  // El radio se mide en TODA la franja del cuerpo, no solo en las filas que
-  // pasaron el test de arriba. Ese test sirve para localizar el cuerpo y separarlo
-  // de la tapa; medir es otra cosa. Hacia abajo la sombra baja la luminancia y esas
-  // filas no pasan el test, pero siguen siendo cuerpo y necesitan su radio: sin el,
-  // el shader las descarta (r < 1) y el diseño se corta a media altura.
+  // The radius is measured across the WHOLE body band, not only the rows that passed
+  // the test above. That test locates the body and separates it from the lid;
+  // measuring is a different job. Lower down the shadow drops the luminance and those
+  // rows fail the test, but they are still body and still need a radius: without one
+  // the shader discards them (r < 1) and the design gets cut off mid-height.
   const radii = new Float32Array(height);
   const centers: number[] = [];
   for (let y = yTop; y <= yBot; y++) {
@@ -87,8 +87,8 @@ export function extractProfile(
     for (let x = 0; x < width; x++) {
       if (white[y * width + x]) { if (minX < 0) minX = x; maxX = x; }
     }
-    // Fallback a la silueta contra el fondo: dentro de la franja, el objeto
-    // ES el cuerpo, asi que sirve cuando el test de blanco se queda corto.
+    // Fall back to the silhouette against the background: inside the band the object
+    // IS the body, so it works when the white test falls short.
     if (minX < 0 || maxX - minX < 4) {
       minX = -1; maxX = -1;
       for (let x = 0; x < width; x++) {
@@ -108,12 +108,12 @@ export function extractProfile(
   return { yTop, yBot, cx, rMax, radii, width, height };
 }
 
-/** px por pulgada de la foto, derivado de que 2*rMax es el diametro fisico. */
+/** Photo pixels per inch, derived from 2*rMax being the physical diameter. */
 export function pixelsPerInch(profile: Profile, diameterInches: number): number {
   return (profile.rMax * 2) / diameterInches;
 }
 
-/** Diametro implicito cuando el ancho del archivo es la circunferencia. */
+/** Implied diameter when the file width is the circumference. */
 export function diameterFromWrap(printWidthInches: number): number {
   return printWidthInches / Math.PI;
 }
