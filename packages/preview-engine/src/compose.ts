@@ -1,76 +1,34 @@
-import type { Design, SlotValues, TextSlot } from "./design";
-import { safeWidthFrac } from "./design";
-
-/** Rectangulo del placeholder, en coordenadas del viewBox del SVG. */
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+import type { Design, SlotValues, TextElement } from "./design";
+import { safeRect } from "./design";
 
 export interface AssetLibrary {
-  /** slug -> imagen ya cargada del asset. */
-  get(slug: string): CanvasImageSource | undefined;
-}
-
-function parse(svg: string): Document {
-  return new DOMParser().parseFromString(svg, "image/svg+xml");
-}
-
-function viewBox(doc: Document): { w: number; h: number } {
-  const vb = doc.documentElement.getAttribute("viewBox");
-  if (!vb) throw new Error("El SVG del diseno necesita viewBox");
-  const [, , w, h] = vb.trim().split(/[\s,]+/).map(Number);
-  return { w, h };
-}
-
-function placeholderRect(doc: Document, target: string): Rect | null {
-  const el = doc.querySelector(`[data-slot="${target}"]`);
-  if (!el) return null;
-  const num = (a: string) => Number(el.getAttribute(a) ?? NaN);
-  const x = num("x"), y = num("y"), w = num("width"), h = num("height");
-  if ([x, y, w, h].some(Number.isNaN)) return null;
-  return { x, y, w, h };
-}
-
-/**
- * Aplica los slots de color y quita los placeholders, devolviendo el SVG listo
- * para rasterizar. Los placeholders de choice/text solo aportan geometria: si se
- * rasterizaran, saldrian impresos.
- */
-function bakeSvg(design: Design, values: SlotValues): string {
-  const doc = parse(design.svg);
-  for (const slot of design.slots) {
-    if (slot.type === "color") {
-      const color = values[slot.id] ?? slot.default;
-      doc.querySelectorAll(`[data-slot="${slot.target}"]`).forEach((el) => {
-        const mode = el.getAttribute("data-slot-paint") ?? "fill";
-        el.setAttribute(mode, color);
-      });
-    } else if (slot.type === "choice" || slot.type === "text" || slot.type === "photo") {
-      doc.querySelector(`[data-slot="${slot.target}"]`)?.remove();
-    }
-  }
-  return new XMLSerializer().serializeToString(doc);
+  /** slug -> fuente SVG del asset. Fuente, no imagen: hay que recolorear antes. */
+  getSvg(slug: string): string | undefined;
 }
 
 function rasterize(svg: string, w: number, h: number): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
   return new Promise((resolve, reject) => {
     const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("SVG invalido")); };
     img.width = w;
     img.height = h;
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("No se pudo rasterizar el SVG del diseno"));
-    };
     img.src = url;
   });
+}
+
+/** Aplica los colores a las partes marcadas con data-recolor. */
+function recolor(svg: string, colors: Record<string, string>): string {
+  if (Object.keys(colors).length === 0) return svg;
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  for (const [part, color] of Object.entries(colors)) {
+    doc.querySelectorAll(`[data-recolor="${part}"]`).forEach((el) => {
+      const mode = el.getAttribute("data-recolor-paint") ?? "fill";
+      el.setAttribute(mode, color);
+    });
+  }
+  return new XMLSerializer().serializeToString(doc);
 }
 
 interface FittedText {
@@ -81,29 +39,28 @@ interface FittedText {
 
 /**
  * Ajusta el texto con tamano minimo. Encoger sin limite deja los nombres largos
- * ilegibles (lo mostro el spike). Al tocar el minimo se parte en lineas.
+ * ilegibles (lo mostro el spike); al tocar el minimo se parte en lineas.
  */
 export function fitText(
   ctx: CanvasRenderingContext2D,
   text: string,
   box: { w: number; h: number },
-  slot: TextSlot,
+  el: Pick<TextElement, "minSizeFrac" | "maxLines" | "fontFamily">,
   fileHeight: number,
 ): FittedText {
-  const minSize = slot.minSizeFrac * fileHeight;
+  const minSize = el.minSizeFrac * fileHeight;
   const measure = (lines: string[], size: number) => {
-    ctx.font = `700 ${size}px ${slot.fontFamily}`;
+    ctx.font = `700 ${size}px ${el.fontFamily}`;
     return Math.max(...lines.map((l) => ctx.measureText(l).width));
   };
-
-  for (let count = 1; count <= slot.maxLines; count++) {
+  for (let count = 1; count <= el.maxLines; count++) {
     const lines = splitLines(text, count);
     if (lines.length !== count) continue;
     for (let size = box.h / count; size >= minSize; size -= 1) {
       if (measure(lines, size) <= box.w) return { lines, size, overflow: false };
     }
   }
-  return { lines: splitLines(text, slot.maxLines), size: minSize, overflow: true };
+  return { lines: splitLines(text, el.maxLines), size: minSize, overflow: true };
 }
 
 function splitLines(text: string, count: number): string[] {
@@ -116,10 +73,11 @@ function splitLines(text: string, count: number): string[] {
 }
 
 /**
- * Cachea el SVG rasterizado por combinacion de color/choice.
+ * Dibuja el archivo de impresion plano.
  *
- * Recolorear obliga a re-rasterizar, que es caro; el texto no. Sin cache, escribir
- * un nombre rasterizaria el SVG en cada pulsacion.
+ * Misma llamada para el preview (escala baja) y para la imprenta (escala 1 = 300
+ * DPI). Que sea el mismo codigo es lo que garantiza que lo impreso coincide con lo
+ * que el cliente aprobo.
  */
 export class DesignComposer {
   private cache = new Map<string, HTMLImageElement>();
@@ -129,17 +87,23 @@ export class DesignComposer {
     this.assets = assets;
   }
 
-  private bakeKey(design: Design, values: SlotValues, scale: number): string {
-    const parts = design.slots
-      .filter((s) => s.type === "color")
-      .map((s) => `${s.id}=${values[s.id] ?? ""}`);
-    return `${design.id}|${scale}|${parts.join(",")}`;
+  /**
+   * Rasteriza un asset ya recoloreado, con cache.
+   *
+   * Recolorear obliga a re-rasterizar, que es caro; escribir texto no. Sin cache,
+   * cada tecla rasterizaria todos los assets del diseno.
+   */
+  private async raster(slug: string, colors: Record<string, string>, w: number, h: number) {
+    const key = `${slug}|${w}x${h}|${JSON.stringify(colors)}`;
+    const hit = this.cache.get(key);
+    if (hit) return hit;
+    const svg = this.assets.getSvg(slug);
+    if (!svg) return null;
+    const img = await rasterize(recolor(svg, colors), w, h);
+    this.cache.set(key, img);
+    return img;
   }
 
-  /**
-   * Dibuja el archivo de impresion plano. Misma llamada para el preview (escala
-   * baja) y para la imprenta (escala 1 = 300 DPI).
-   */
   async draw(
     canvas: HTMLCanvasElement,
     design: Design,
@@ -153,46 +117,37 @@ export class DesignComposer {
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, w, h);
 
-    const doc = parse(design.svg);
-    const vb = viewBox(doc);
-    const sx = w / vb.w;
-    const sy = h / vb.h;
-
-    const key = this.bakeKey(design, values, scale);
-    let base = this.cache.get(key);
-    if (!base) {
-      base = await rasterize(bakeSvg(design, values), w, h);
-      this.cache.set(key, base);
-    }
-    ctx.drawImage(base, 0, 0, w, h);
-
-    const safeW = safeWidthFrac(design.safeAngleDeg, design.spec.wraps360) * w;
+    const safe = safeRect(design);
     let overflow = false;
 
-    for (const slot of design.slots) {
-      const r = placeholderRect(doc, slot.target);
-      if (!r) continue;
-      const box = { x: r.x * sx, y: r.y * sy, w: r.w * sx, h: r.h * sy };
+    for (const el of design.elements) {
+      const box = {
+        x: el.rect.x * scale, y: el.rect.y * scale,
+        w: el.rect.w * scale, h: el.rect.h * scale,
+      };
 
-      if (slot.type === "choice") {
-        const img = this.assets.get(values[slot.id] ?? slot.default);
+      if (el.kind === "asset") {
+        const slug = el.choice ? (values[el.id] ?? el.slug) : el.slug;
+        const colors: Record<string, string> = {};
+        for (const r of el.recolor) colors[r.part] = values[`${el.id}.${r.part}`] ?? r.default;
+        const img = await this.raster(slug, colors, Math.round(box.w), Math.round(box.h));
         if (img) ctx.drawImage(img, box.x, box.y, box.w, box.h);
-      } else if (slot.type === "text") {
-        const text = (values[slot.id] ?? "").trim();
+      } else if (el.kind === "text") {
+        const text = (el.fixed ?? values[el.id] ?? "").trim();
         if (!text) continue;
-        // El texto nunca puede exceder la zona segura, aunque su caja sea mas ancha.
-        const maxW = Math.min(box.w, safeW);
-        const fit = fitText(ctx, text, { w: maxW, h: box.h }, slot, h);
+        // El texto no puede salirse de la zona segura aunque su caja sea mas ancha.
+        const left = Math.max(box.x, safe.x * scale);
+        const right = Math.min(box.x + box.w, (safe.x + safe.w) * scale);
+        const maxW = Math.max(right - left, 1);
+        const fit = fitText(ctx, text, { w: maxW, h: box.h }, el, h);
         overflow = overflow || fit.overflow;
-        ctx.fillStyle = slot.color;
+        ctx.fillStyle = el.color;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.font = `700 ${fit.size}px ${slot.fontFamily}`;
+        ctx.font = `700 ${fit.size}px ${el.fontFamily}`;
         const lineH = fit.size * 1.1;
         const cy = box.y + box.h / 2 - ((fit.lines.length - 1) * lineH) / 2;
-        fit.lines.forEach((line, i) =>
-          ctx.fillText(line, box.x + box.w / 2, cy + i * lineH),
-        );
+        fit.lines.forEach((l, i) => ctx.fillText(l, box.x + box.w / 2, cy + i * lineH));
       }
     }
 

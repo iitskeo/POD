@@ -1,0 +1,14 @@
+{
+  "name": "@abbiss/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "migrate:local": "wrangler d1 migrations apply abbiss --local"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260701.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.111.0"
+  }
+}

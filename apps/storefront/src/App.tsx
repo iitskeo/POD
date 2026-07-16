@@ -1,53 +1,24 @@
 import {
+  ApiClient,
   DEFAULT_CALIBRATION,
   DesignComposer,
   PreviewRenderer,
+  SEED_ASSETS,
   WINE_TUMBLER_11OZ,
   defaultValues,
   diameterFromWrap,
   extractProfile,
   pixelsPerInch,
   safeWidthFrac,
+  seedLibrary,
+  svgDataUrl,
   type Design,
   type Profile,
   type SlotValues,
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const ICONS = ["code", "braces", "terminal", "serpiente", "taza", "rama"];
-
-/**
- * Este diseno vendra de D1; aqui esta inline mientras no exista el admin.
- * Los colores del marco son neutros y los acentos viven solo en la barra: el manual
- * exige un unico acento por composicion, y curando las opciones el cliente no puede
- * romperlo.
- */
-const DESIGN: Omit<Design, "svg"> = {
-  id: "terminal",
-  name: "Terminal",
-  spec: WINE_TUMBLER_11OZ,
-  safeAngleDeg: DEFAULT_CALIBRATION.safeAngleDeg,
-  slots: [
-    {
-      id: "marco", type: "color", label: "Marco", target: "marco",
-      options: ["#F5F5F0", "#FFFFFF", "#E4E4DC"], default: "#F5F5F0",
-    },
-    {
-      id: "barra", type: "color", label: "Barra", target: "barra",
-      options: ["#FF5A1F", "#0A0A0A", "#161616"], default: "#FF5A1F",
-    },
-    {
-      id: "icono", type: "choice", label: "Lenguaje", target: "icono",
-      options: ICONS, default: "code",
-    },
-    {
-      id: "nombre", type: "text", label: "Tu nombre o puesto", target: "nombre",
-      maxChars: 18, minSizeFrac: 0.11, maxLines: 2,
-      color: "#0A0A0A", fontFamily: '"Space Grotesk", sans-serif',
-      placeholder: "Escribe aqui",
-    },
-  ],
-};
+const api = new ApiClient("http://localhost:8787");
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -67,11 +38,14 @@ function toImageData(img: HTMLImageElement): ImageData {
   return ctx.getImageData(0, 0, c.width, c.height);
 }
 
+const assetName = (slug: string) => SEED_ASSETS.find((a) => a.slug === slug)?.name ?? slug;
+const assetSvg = (slug: string) => SEED_ASSETS.find((a) => a.slug === slug)?.svg ?? "";
+
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const artRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const rendererRef = useRef<PreviewRenderer | null>(null);
-  const composerRef = useRef<DesignComposer | null>(null);
+  const composer = useMemo(() => new DesignComposer(seedLibrary()), []);
 
   const [design, setDesign] = useState<Design | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -92,24 +66,29 @@ export function App() {
     (async () => {
       try {
         await document.fonts.ready;
-        const assets = new Map<string, HTMLImageElement>();
-        const [photo, svg, ...icons] = await Promise.all([
+        const [photo, published] = await Promise.all([
           loadImage("/tumbler.png"),
-          fetch("/designs/terminal.svg").then((r) => r.text()),
-          ...ICONS.map((s) => loadImage(`/icons/${s}.svg`)),
+          api.listDesigns("publicado"),
         ]);
         if (cancelled) return;
-        ICONS.forEach((s, i) => assets.set(s, icons[i]));
-
+        if (published.length === 0) {
+          setError("Todavia no hay ningun diseno publicado. Publica uno desde el admin.");
+          return;
+        }
+        const stored = published[0];
+        const d: Design = {
+          id: stored.id,
+          name: stored.name,
+          spec: WINE_TUMBLER_11OZ,
+          safeAngleDeg: DEFAULT_CALIBRATION.safeAngleDeg,
+          elements: stored.elements,
+        };
         const canvas = canvasRef.current!;
         canvas.width = photo.naturalWidth;
         canvas.height = photo.naturalHeight;
         rendererRef.current = new PreviewRenderer(canvas, photo);
-        composerRef.current = new DesignComposer({ get: (s) => assets.get(s) });
-
-        const d: Design = { ...DESIGN, svg };
         setProfile(extractProfile(toImageData(photo)));
-        setValues({ ...defaultValues(d), nombre: "KENNETH" });
+        setValues(defaultValues(d));
         setDesign(d);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -120,8 +99,7 @@ export function App() {
 
   useEffect(() => {
     const renderer = rendererRef.current;
-    const composer = composerRef.current;
-    if (!renderer || !composer || !design || !profile || !band) return;
+    if (!renderer || !design || !profile || !band) return;
     let stale = false;
     (async () => {
       const res = await composer.draw(artRef.current, design, values, 0.5);
@@ -130,24 +108,26 @@ export function App() {
       renderer.render({ profile, band, art: artRef.current });
     })();
     return () => { stale = true; };
-  }, [design, profile, band, values]);
+  }, [design, profile, band, values, composer]);
 
   const set = (id: string, v: string) => setValues((p) => ({ ...p, [id]: v }));
 
   if (error) {
     return (
       <div className="wrap">
-        <p className="eyebrow">Error</p>
-        <h1>No se pudo cargar el personalizador</h1>
+        <div className="brand">Abbiss</div>
+        <p className="eyebrow" style={{ marginTop: 40 }}>Sin catalogo</p>
+        <h1>Todavia no hay nada que personalizar.</h1>
         <p className="lede">{error}</p>
       </div>
     );
   }
 
   const safePct = Math.round(
-    safeWidthFrac(DESIGN.safeAngleDeg, WINE_TUMBLER_11OZ.wraps360) * 100,
+    safeWidthFrac(DEFAULT_CALIBRATION.safeAngleDeg, WINE_TUMBLER_11OZ.wraps360) * 100,
   );
-  const textSlot = DESIGN.slots.find((s) => s.type === "text");
+  const textEls = design?.elements.filter((e) => e.kind === "text" && !e.fixed) ?? [];
+  const incompleto = textEls.some((e) => !(values[e.id] ?? "").trim());
 
   return (
     <div className="wrap">
@@ -168,61 +148,65 @@ export function App() {
         </div>
 
         <div className="panel">
-          {DESIGN.slots.map((slot) => {
-            if (slot.type === "color") {
+          {design?.elements.map((el) => {
+            if (el.kind === "asset") {
               return (
-                <div className="field" key={slot.id}>
-                  <span className="eyebrow">{slot.label}</span>
-                  <div className="swatches">
-                    {slot.options.map((c) => (
-                      <button
-                        key={c}
-                        className="swatch"
-                        style={{ background: c }}
-                        aria-pressed={values[slot.id] === c}
-                        aria-label={c}
-                        onClick={() => set(slot.id, c)}
-                      />
+                <div key={el.id}>
+                  {el.choice && (
+                    <div className="field">
+                      <span className="eyebrow">{el.choice.label}</span>
+                      <div className="icons">
+                        {el.choice.options.map((slug) => (
+                          <button
+                            key={slug}
+                            className="icon-btn"
+                            aria-pressed={(values[el.id] ?? el.slug) === slug}
+                            onClick={() => set(el.id, slug)}
+                            title={assetName(slug)}
+                          >
+                            <img src={svgDataUrl(assetSvg(slug))} alt={assetName(slug)} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {el.recolor
+                    .filter((r) => r.options.length > 1)
+                    .map((r) => (
+                      <div className="field" key={r.part} style={{ marginTop: 20 }}>
+                        <span className="eyebrow">{r.label}</span>
+                        <div className="swatches">
+                          {r.options.map((c) => (
+                            <button
+                              key={c}
+                              className="swatch"
+                              style={{ background: c }}
+                              aria-label={c}
+                              aria-pressed={(values[`${el.id}.${r.part}`] ?? r.default) === c}
+                              onClick={() => set(`${el.id}.${r.part}`, c)}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ))}
-                  </div>
                 </div>
               );
             }
-            if (slot.type === "choice") {
+            if (el.kind === "text" && !el.fixed) {
               return (
-                <div className="field" key={slot.id}>
-                  <span className="eyebrow">{slot.label}</span>
-                  <div className="icons">
-                    {slot.options.map((s) => (
-                      <button
-                        key={s}
-                        className="icon-btn"
-                        aria-pressed={values[slot.id] === s}
-                        onClick={() => set(slot.id, s)}
-                        title={s}
-                      >
-                        <img src={`/icons/${s}.svg`} alt={s} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            }
-            if (slot.type === "text") {
-              return (
-                <div className="field" key={slot.id}>
-                  <span className="eyebrow">{slot.label}</span>
+                <div className="field" key={el.id}>
+                  <span className="eyebrow">{el.label}</span>
                   <input
                     type="text"
-                    value={values[slot.id] ?? ""}
-                    maxLength={slot.maxChars}
-                    placeholder={slot.placeholder}
-                    onChange={(e) => set(slot.id, e.target.value)}
+                    value={values[el.id] ?? ""}
+                    maxLength={el.maxChars}
+                    placeholder={el.placeholder}
+                    onChange={(e) => set(el.id, e.target.value)}
                   />
                   <p className="hint" data-warn={overflow}>
                     {overflow
                       ? "Se pasa del area segura. Acorta el texto."
-                      : `${(values[slot.id] ?? "").length}/${slot.maxChars} caracteres`}
+                      : `${(values[el.id] ?? "").length}/${el.maxChars} caracteres`}
                   </p>
                 </div>
               );
@@ -230,10 +214,7 @@ export function App() {
             return null;
           })}
 
-          <button
-            className="cta"
-            disabled={!design || overflow || !(values[textSlot?.id ?? ""] ?? "").trim()}
-          >
+          <button className="cta" disabled={!design || overflow || incompleto}>
             Agregar al carrito
           </button>
 
