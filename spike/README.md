@@ -37,6 +37,11 @@ Requiere `tumbler.png` en la raiz (convertido del .avif de Printify) y Pillow + 
 4. **El auto-ajuste sin minimo deja ilegibles los nombres largos.** Hace falta
    `min_font_size` + salto a dos lineas.
 
+## shots/
+
+Capturas del motor real (WebGL2) corriendo en el navegador, no del prototipo Python.
+`webgl_final.png` es la verificacion de que el port funciona.
+
 ## Limitaciones de esta evidencia
 
 - Foto a **520x520**. El veredicto final de realismo necesita la original de Printify.
