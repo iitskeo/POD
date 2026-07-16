@@ -140,12 +140,24 @@ El template de Printify del Wine Tumbler (12oz) es **3278 × 900 px a 300 DPI =
 diámetro. El archivo de impresión **envuelve el producto 360°**.
 
 Consecuencia para el personalizador: la cámara solo ve la cara frontal, y por
-`cos(θ)` la banda legible es aproximadamente el **40% central** del archivo. Los
-bordes se comprimen hasta desaparecer.
+`cos(θ)` los bordes se comprimen hasta desaparecer. Medido en el spike:
 
-El `text_zone` y el `icon_zone` deben por tanto vivir dentro de esa zona segura, y el
-admin debe verla dibujada al calibrar. Sin esto, un cliente escribe un nombre largo y
-se le va por los lados del vaso.
+| Ángulo | % del archivo | px del archivo | Compresión `cos(θ)` |
+|---|---|---|---|
+| ±30° | 16.7% | 546 | 0.87 |
+| **±45°** | **25.0%** | **820** | **0.71** |
+| ±60° | 33.3% | 1093 | 0.50 |
+
+**La zona segura es ±45°, o sea el 25% central: 820 px de los 3278.** El resto del
+archivo envuelve la parte trasera del vaso.
+
+El `text_zone` y el `icon_zone` deben vivir dentro de esa zona, y el admin debe verla
+dibujada al calibrar. El spike lo demostró: un texto al 60% del ancho del archivo son
+216° de envoltura — se sale del vaso y se corta en la silueta.
+
+Nota adicional del spike: el cuerpo blanco del Wine Tumbler mide 3.94 in de alto pero
+el área imprimible son 3.00 in. **El área de impresión no cubre todo el cuerpo**, y la
+silueta no dice dónde empieza la banda. De ahí que el admin tenga que marcarla a mano.
 
 Se hace en el cliente porque los Workers no tienen buenas librerías de procesamiento
 de imagen, la operación es puntual, y el admin necesita ver el resultado mientras
@@ -200,8 +212,13 @@ imagen exacta que el cliente aprobó al comprar.
 ### 5.1 Reglas de la zona de texto
 
 El manual de marca exige un solo acento por composición, así que el color del texto es
-una lista corta definida por el admin, no un color picker libre. El motor auto-ajusta
-el tamaño de fuente para que textos de distinta longitud quepan bien.
+una lista corta definida por el admin, no un color picker libre.
+
+El motor auto-ajusta el tamaño de fuente, pero **con tamaño mínimo**. El spike mostró
+que encoger sin límite deja los nombres largos ilegibles ("MARIA FERNANDA" quedó
+diminuto junto a "ANA"). Al llegar al mínimo, el comportamiento es partir en dos
+líneas; si aun así no cabe, el campo rechaza más caracteres. El `text_zone` guarda por
+tanto `min_font_size` y `max_lines` además del máximo de caracteres.
 
 ## 6. Flujos
 
