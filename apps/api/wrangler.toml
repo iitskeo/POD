@@ -8,5 +8,10 @@ database_name = "abbiss"
 database_id = "local"
 migrations_dir = "migrations"
 
+# Product photos, asset uploads and generated print files.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "abbiss"
+
 [dev]
 port = 8787

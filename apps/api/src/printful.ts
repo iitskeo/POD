@@ -152,6 +152,30 @@ export const SELLING_REGIONS = [
   "southeast_asia", "republic_of_korea", "all",
 ] as const;
 
+/** A `placement: "default"` mockup style: the print file's real measurements. */
+export interface PrintFileStyle {
+  placement: string;
+  technique: string;
+  print_area_width: number;
+  print_area_height: number;
+  dpi: number;
+  mockup_styles?: Array<{ id: number; view_name: string; category_name: string }>;
+}
+
+/**
+ * Degrees of the product covered by a print file `widthIn` wide.
+ *
+ * Printful gives the print width but not the product's diameter, so the wrap cannot
+ * be derived: a 9in file is a full turn on a small cup and a third of a big one.
+ * Cylinders default to 360 and the admin corrects it against the preview; that is a
+ * visible, cheap mistake, whereas guessing a diameter would be an invisible one.
+ */
+export function defaultWrapDegrees(technique: string): number | null {
+  // UV and sublimation on drinkware wrap the body; DTG and embroidery are flat.
+  const cylindrical = ["uv", "uv-cylinder", "sublimation"];
+  return cylindrical.includes(technique.toLowerCase()) ? 360 : null;
+}
+
 export function catalogPath(params: URLSearchParams): string {
   const q = new URLSearchParams();
   q.set("limit", params.get("limit") ?? "20");

@@ -3,6 +3,7 @@ import {
   type ApiClient,
   type CatalogProduct,
   type CatalogVariant,
+  type ImportedProduct,
   type MockupStyle,
   type ProductPrices,
 } from "@abbiss/preview-engine";
@@ -27,6 +28,9 @@ export function ProductDetail({ api, product, onClose }: Props) {
   const [prices, setPrices] = useState<ProductPrices | null>(null);
   const [selected, setSelected] = useState<CatalogVariant | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ImportedProduct | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -60,6 +64,25 @@ export function ProductDetail({ api, product, onClose }: Props) {
   const image = selected?.image ?? product.image;
   const shown = selected ? priceOf(selected.id) : null;
 
+  const doImport = async () => {
+    setImporting(true);
+    setImportError(null);
+    try {
+      setImported(
+        await api.importProduct({
+          productId: product.id,
+          variantId: selected?.id,
+          photoUrl: image,
+          name: selected?.name ?? product.name,
+        }),
+      );
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="modal-bg" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-label={product.name}>
@@ -85,13 +108,16 @@ export function ProductDetail({ api, product, onClose }: Props) {
               <span className="hint" style={{ display: "inline" }}>{prices?.currency ?? ""}</span>
             </p>
 
-            <button className="cta wide" disabled title="Not wired up yet">
-              Import product
+            <button className="cta wide" onClick={doImport} disabled={importing}>
+              {importing ? "Importing..." : "Import this photo"}
             </button>
             <p className="hint">
-              The engine now handles partial wraps. Wiring import to R2 and the products
-              table is next.
+              {imported
+                ? `Imported as ${imported.name} — ${imported.printSpec.widthPx}x${imported.printSpec.heightPx}px, ` +
+                  `${imported.technique}, ${imported.printSpec.wrapDegrees ?? "flat"}${imported.printSpec.wrapDegrees ? "° wrap" : ""}.`
+                : "The preview needs the product front-on against a flat background. Pick the variant whose photo looks like that, then import."}
             </p>
+            {importError && <p className="hint" style={{ color: "var(--senal)" }}>{importError}</p>}
           </div>
 
           <div className="modal-col">

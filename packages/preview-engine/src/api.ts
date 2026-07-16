@@ -1,4 +1,5 @@
 import type { DesignElement } from "./design";
+import type { PrintSpec } from "./types";
 
 /** A design as it lives in D1. `spec` and `safeAngleDeg` come from the product. */
 export interface StoredDesign {
@@ -94,6 +95,31 @@ export function minPrice(p: ProductPrices): number | null {
   return ok.length ? Math.min(...ok) : null;
 }
 
+/** A product as it lives in D1, after import. */
+export interface StoredProduct {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  source: string;
+  externalProductId: string | null;
+  externalVariantId: string | null;
+  surface: "revolution" | "flat";
+  hasPhoto: boolean;
+  printBand: { yStart: number; height: number } | null;
+  calibration: { shadingStrength: number; safeAngleDeg: number } | null;
+  printSpec: PrintSpec;
+}
+
+export interface ImportedProduct {
+  id: string;
+  name: string;
+  photoKey: string;
+  printSpec: PrintSpec;
+  surface: string;
+  technique: string;
+}
+
 export class ApiClient {
   constructor(private base: string) {}
 
@@ -142,6 +168,27 @@ export class ApiClient {
 
   productPrices(id: number) {
     return this.req<{ data: ProductPrices }>(`/api/printful/catalog/${id}/prices`);
+  }
+
+  /**
+   * Imports a catalog product.
+   *
+   * `photoUrl` is chosen by the admin: the engine needs the product front-on against
+   * a flat background, and the catalog mixes in angles, props and lifestyle shots.
+   */
+  importProduct(input: { productId: number; variantId?: number; photoUrl: string; name?: string }) {
+    return this.req<ImportedProduct>("/api/printful/import", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  listProducts() {
+    return this.req<StoredProduct[]>("/api/products");
+  }
+
+  productPhotoUrl(id: string) {
+    return `${this.base}/api/products/${id}/photo`;
   }
 
   /** Every variant, paging past Printful's 100 per page cap. */

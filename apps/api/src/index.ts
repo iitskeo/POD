@@ -1,5 +1,7 @@
 export interface Env {
   DB: D1Database;
+  /** Product photos, asset uploads and generated print files. */
+  BUCKET: R2Bucket;
   /** Allowed origins, comma separated. */
   ALLOWED_ORIGINS?: string;
   /** Printful app credentials. They live in .dev.vars, never in the code. */
@@ -14,7 +16,9 @@ import {
   authorizeUrl,
   call,
   catalogPath,
+  defaultWrapDegrees,
   exchangeCode,
+  type PrintFileStyle,
   type StoreRow,
 } from "./printful";
 
@@ -170,7 +174,128 @@ async function printfulRoutes(
     return json({ product, styles, variants }, {}, headers);
   }
 
+  if (path === "/api/printful/import" && req.method === "POST") {
+    const body = (await req.json()) as {
+      productId: number;
+      variantId?: number;
+      photoUrl: string;
+      name?: string;
+    };
+    return await importProduct(env, store, body, rq, headers);
+  }
+
   return json({ error: "printful route not found" }, { status: 404 }, headers);
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+}
+
+/**
+ * Imports a catalog product: photo into R2, measurements into D1.
+ *
+ * The photo is passed in by the admin rather than picked here. The engine needs the
+ * product front-on against a flat background to extract R(y), and Printful's catalog
+ * images include angles, props and lifestyle shots. Choosing one automatically would
+ * import products whose preview silently cannot work.
+ */
+async function importProduct(
+  env: Env,
+  store: StoreRow,
+  body: { productId: number; variantId?: number; photoUrl: string; name?: string },
+  rq: string,
+  headers: HeadersInit,
+): Promise<Response> {
+  const { productId, variantId, photoUrl } = body;
+  if (!photoUrl) return json({ error: "photoUrl is required" }, { status: 400 }, headers);
+
+  const [prodRes, stylesRes] = await Promise.all([
+    call<{ data?: { name: string; type: string } }>(env, store, `/v2/catalog-products/${productId}?${rq}`),
+    call<{ data?: PrintFileStyle[] }>(env, store, `/v2/catalog-products/${productId}/mockup-styles?${rq}`),
+  ]);
+  const product = prodRes.data ?? (prodRes as unknown as { name: string; type: string });
+  const styles = stylesRes.data ?? [];
+  const printFile = styles.find((s) => s.placement === "default") ?? styles[0];
+  if (!printFile) {
+    return json({ error: "Printful gave no print file measurements" }, { status: 422 }, headers);
+  }
+
+  const photo = await fetch(photoUrl);
+  if (!photo.ok) {
+    return json({ error: `Could not fetch the photo (${photo.status})` }, { status: 422 }, headers);
+  }
+  const id = `printful-${productId}${variantId ? `-${variantId}` : ""}`;
+  const photoKey = `products/${id}/photo`;
+  await env.BUCKET.put(photoKey, await photo.arrayBuffer(), {
+    httpMetadata: { contentType: photo.headers.get("Content-Type") ?? "image/jpeg" },
+  });
+
+  const spec = {
+    widthPx: Math.round(printFile.print_area_width * printFile.dpi),
+    heightPx: Math.round(printFile.print_area_height * printFile.dpi),
+    dpi: printFile.dpi,
+    wrapDegrees: defaultWrapDegrees(printFile.technique),
+    bleedPx: 0,
+  };
+  const surface = spec.wrapDegrees === null ? "flat" : "revolution";
+  const name = body.name ?? product.name;
+  const now = Date.now();
+
+  await env.DB.prepare(
+    `INSERT INTO products
+       (id, name, slug, status, source, external_product_id, external_variant_id,
+        photo_key, surface, print_band, calibration, print_spec, store_id,
+        created_at, updated_at)
+     VALUES (?1,?2,?3,'draft','printful',?4,?5,?6,?7,NULL,?8,?9,?10,?11,?11)
+     ON CONFLICT(id) DO UPDATE SET
+       name = ?2, photo_key = ?6, surface = ?7, print_spec = ?9, updated_at = ?11`,
+  ).bind(
+    id,
+    name,
+    slugify(`${name}-${productId}`),
+    String(productId),
+    variantId ? String(variantId) : null,
+    photoKey,
+    surface,
+    JSON.stringify({ shadingStrength: 1, safeAngleDeg: 45 }),
+    JSON.stringify(spec),
+    store.id,
+    now,
+  ).run();
+
+  return json({ id, name, photoKey, printSpec: spec, surface, technique: printFile.technique }, {}, headers);
+}
+
+interface ProductRow {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  source: string;
+  external_product_id: string | null;
+  external_variant_id: string | null;
+  photo_key: string | null;
+  surface: string;
+  print_band: string | null;
+  calibration: string | null;
+  print_spec: string;
+}
+
+function rowToProduct(r: ProductRow) {
+  return {
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    status: r.status,
+    source: r.source,
+    externalProductId: r.external_product_id,
+    externalVariantId: r.external_variant_id,
+    surface: r.surface,
+    hasPhoto: !!r.photo_key,
+    printBand: r.print_band ? JSON.parse(r.print_band) : null,
+    calibration: r.calibration ? JSON.parse(r.calibration) : null,
+    printSpec: JSON.parse(r.print_spec),
+  };
 }
 
 interface DesignRow {
@@ -209,6 +334,31 @@ export default {
     try {
       if (path.startsWith("/api/printful")) {
         return await printfulRoutes(path, req, env, headers);
+      }
+
+      // Photos are served from R2 so the browser never needs a Printful URL, and the
+      // engine can read pixels without cross-origin trouble.
+      const photo = path.match(/^\/api\/products\/([\w-]+)\/photo$/);
+      if (photo && req.method === "GET") {
+        const row = await env.DB.prepare("SELECT photo_key FROM products WHERE id = ?")
+          .bind(photo[1]).first<{ photo_key: string | null }>();
+        if (!row?.photo_key) return json({ error: "not found" }, { status: 404 }, headers);
+        const obj = await env.BUCKET.get(row.photo_key);
+        if (!obj) return json({ error: "photo missing from R2" }, { status: 404 }, headers);
+        return new Response(obj.body, {
+          headers: {
+            ...headers,
+            "Content-Type": obj.httpMetadata?.contentType ?? "image/jpeg",
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      }
+
+      if (path === "/api/products" && req.method === "GET") {
+        const { results } = await env.DB.prepare(
+          "SELECT * FROM products ORDER BY updated_at DESC",
+        ).all<ProductRow>();
+        return json(results.map(rowToProduct), {}, headers);
       }
 
       if (path === "/api/designs" && req.method === "GET") {
