@@ -80,11 +80,29 @@ export interface CatalogPage {
   paging?: { total: number; offset: number; limit: number };
 }
 
+/**
+ * Regiones de venta validas de Printful. Ojo: no existe "usa", es "north_america".
+ */
+export const SELLING_REGIONS = [
+  "worldwide", "north_america", "canada", "europe", "spain", "latvia", "uk",
+  "france", "germany", "australia", "japan", "new_zealand", "italy", "brazil",
+  "southeast_asia", "republic_of_korea", "all",
+] as const;
+
 export function catalogPath(params: URLSearchParams): string {
   const q = new URLSearchParams();
   q.set("limit", params.get("limit") ?? "20");
   q.set("offset", params.get("offset") ?? "0");
-  for (const k of ["category_ids", "colors", "techniques", "sort_type"]) {
+
+  // La doc dice que tiene default "worldwide", pero la API responde
+  // "Selling region not found" si no viaja explicito. Se manda siempre.
+  const region = params.get("selling_region_name") ?? "worldwide";
+  if (!(SELLING_REGIONS as readonly string[]).includes(region)) {
+    throw new Error(`Region invalida: ${region}. Validas: ${SELLING_REGIONS.join(", ")}`);
+  }
+  q.set("selling_region_name", region);
+
+  for (const k of ["category_ids", "colors", "techniques", "sort_type", "sort_direction", "new"]) {
     const v = params.get(k);
     if (v) q.set(k, v);
   }

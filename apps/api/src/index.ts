@@ -125,13 +125,21 @@ async function printfulRoutes(
   const detail = path.match(/^\/api\/printful\/catalog\/(\d+)$/);
   if (detail) {
     const id = detail[1];
+    // La region viaja tambien en el detalle: no solo el listado la exige.
+    const region = url.searchParams.get("selling_region_name") ?? "worldwide";
+    const rq = `selling_region_name=${encodeURIComponent(region)}`;
     // mockup-styles trae print_area_width/height: las medidas del template, que es
     // justo lo que hoy esta hardcodeado.
-    const [product, styles] = await Promise.all([
-      call<unknown>(store, `/v2/catalog-products/${id}`),
-      call<unknown>(store, `/v2/catalog-products/${id}/mockup-styles`).catch(() => null),
+    const [product, styles, variants] = await Promise.all([
+      call<unknown>(store, `/v2/catalog-products/${id}?${rq}`),
+      call<unknown>(store, `/v2/catalog-products/${id}/mockup-styles?${rq}`).catch((e) => ({
+        error: e instanceof Error ? e.message : String(e),
+      })),
+      call<unknown>(store, `/v2/catalog-products/${id}/catalog-variants?${rq}&limit=5`).catch(
+        (e) => ({ error: e instanceof Error ? e.message : String(e) }),
+      ),
     ]);
-    return json({ product, styles }, {}, headers);
+    return json({ product, styles, variants }, {}, headers);
   }
 
   return json({ error: "ruta printful no encontrada" }, { status: 404 }, headers);

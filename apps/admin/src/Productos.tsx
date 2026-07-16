@@ -98,7 +98,7 @@ export function Productos({ api }: Props) {
         {page?.data.map((p) => (
           <article className="cat-card" key={p.id}>
             <div className="cat-img">
-              <img src={p.image} alt={p.name} loading="lazy" />
+              <img src={p.image} alt={p.name} />
             </div>
             <h3>{p.name}</h3>
             <p className="hint">
