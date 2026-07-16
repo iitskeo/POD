@@ -140,6 +140,18 @@ async function printfulRoutes(
     return json(data, {}, headers);
   }
 
+  // Paged variants: some products have 200+, past Printful's 100 per page cap.
+  const vars = path.match(/^\/api\/printful\/catalog\/(\d+)\/variants$/);
+  if (vars) {
+    const off = url.searchParams.get("offset") ?? "0";
+    const data = await call<unknown>(
+      env,
+      store,
+      `/v2/catalog-products/${vars[1]}/catalog-variants?${rq}&limit=100&offset=${off}`,
+    );
+    return json(data, {}, headers);
+  }
+
   const detail = path.match(/^\/api\/printful\/catalog\/(\d+)$/);
   if (detail) {
     const id = detail[1];
@@ -150,7 +162,8 @@ async function printfulRoutes(
       call<unknown>(env, store, `/v2/catalog-products/${id}/mockup-styles?${rq}`).catch((e) => ({
         error: e instanceof Error ? e.message : String(e),
       })),
-      call<unknown>(env, store, `/v2/catalog-products/${id}/catalog-variants?${rq}&limit=5`).catch(
+      // 100 is Printful's max. Products with more variants are paged by the client.
+      call<unknown>(env, store, `/v2/catalog-products/${id}/catalog-variants?${rq}&limit=100`).catch(
         (e) => ({ error: e instanceof Error ? e.message : String(e) }),
       ),
     ]);

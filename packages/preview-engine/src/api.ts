@@ -144,6 +144,24 @@ export class ApiClient {
     return this.req<{ data: ProductPrices }>(`/api/printful/catalog/${id}/prices`);
   }
 
+  /** Every variant, paging past Printful's 100 per page cap. */
+  async allVariants(id: number, known?: number) {
+    const first = await this.req<{ data: CatalogVariant[]; paging?: { total: number } }>(
+      `/api/printful/catalog/${id}/variants?offset=0`,
+    );
+    const total = first.paging?.total ?? known ?? first.data.length;
+    if (total <= first.data.length) return first.data;
+
+    const rest = await Promise.all(
+      Array.from({ length: Math.ceil((total - 100) / 100) }, (_, i) =>
+        this.req<{ data: CatalogVariant[] }>(
+          `/api/printful/catalog/${id}/variants?offset=${(i + 1) * 100}`,
+        ),
+      ),
+    );
+    return [...first.data, ...rest.flatMap((r) => r.data)];
+  }
+
   private async req<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${this.base}${path}`, {
       ...init,

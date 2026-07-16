@@ -6,7 +6,7 @@ import {
   type PrintfulStatus,
 } from "@abbiss/preview-engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Detalle } from "./Detalle";
+import { ProductDetail } from "./ProductDetail";
 
 interface Props {
   api: ApiClient;
@@ -45,9 +45,9 @@ export function Productos({ api }: Props) {
     const v = p.get("printful");
     if (!v) return null;
     history.replaceState({}, "", location.pathname);
-    if (v === "conectado") return "Printful conectado.";
-    if (v === "rechazado") return "Cancelaste la conexion.";
-    return `Printful fallo: ${p.get("msg") ?? "error"}`;
+    if (v === "conectado") return "Printful connected.";
+    if (v === "rechazado") return "You cancelled the connection.";
+    return `Printful failed: ${p.get("msg") ?? "error"}`;
   });
 
   useEffect(() => {
@@ -135,19 +135,19 @@ export function Productos({ api }: Props) {
     if (v.trim()) setCatId(null);
   };
 
-  if (!status) return <p className="hint">Consultando estado...</p>;
+  if (!status) return <p className="hint">Checking connection...</p>;
 
   if (!status.connected) {
     return (
       <div className="connect-card">
         {aviso && <p className="hint" style={{ marginBottom: 12 }}>{aviso}</p>}
-        <span className="eyebrow">Proveedor</span>
-        <h2 className="connect-title">Conecta tu tienda de Printful</h2>
+        <span className="eyebrow">Provider</span>
+        <h2 className="connect-title">Connect your Printful store</h2>
         <p className="hint" style={{ maxWidth: "42ch", marginBottom: 16 }}>
-          Un click y traemos el catalogo. El token se queda en el servidor: ni el
-          navegador ni el codigo lo ven nunca.
+          One click and we pull the catalog. The token stays on the server: neither the
+          browser nor the code ever sees it.
         </p>
-        <a className="cta" href={api.connectUrl()}>Conectar Printful</a>
+        <a className="cta" href={api.connectUrl()}>Connect Printful</a>
         {error && <p className="hint" style={{ color: "var(--senal)" }}>{error}</p>}
       </div>
     );
@@ -157,10 +157,10 @@ export function Productos({ api }: Props) {
     return (
       <div className="connect-card">
         <span className="eyebrow">Error</span>
-        <h2 className="connect-title">No se pudo leer el catalogo</h2>
+        <h2 className="connect-title">Could not load the catalog</h2>
         <p className="hint">{error}</p>
         <a className="btn" href={api.connectUrl()} style={{ marginTop: 14, display: "inline-block" }}>
-          Reconectar Printful
+          Reconnect Printful
         </a>
       </div>
     );
@@ -169,7 +169,7 @@ export function Productos({ api }: Props) {
   if (!items) {
     return (
       <p className="hint">
-        Cargando catalogo... {progreso.loaded}
+        Loading catalog... {progreso.loaded}
         {progreso.total ? ` / ${progreso.total}` : ""}
       </p>
     );
@@ -181,13 +181,13 @@ export function Productos({ api }: Props) {
         type="text"
         className="buscador"
         value={q}
-        placeholder="Buscar por nombre, marca o modelo..."
+        placeholder="Search by name, brand or model..."
         onChange={(e) => buscar(e.target.value)}
       />
 
       <div className="chips">
         <button data-on={catId === null} onClick={() => setCatId(null)}>
-          Todo ({items.length})
+          All ({items.length})
         </button>
         {raices.map((c) => {
           const n = items.filter((p) => rootOf(p.main_category_id, byId) === c.id).length;
@@ -202,7 +202,7 @@ export function Productos({ api }: Props) {
 
       <p className="hint">
         {aviso ? `${aviso} ` : ""}
-        {filtrados.length} de {items.length} productos.
+        {filtrados.length} of {items.length} products.
       </p>
 
       <div className="cat-grid">
@@ -215,15 +215,15 @@ export function Productos({ api }: Props) {
                 <h3>{p.name}</h3>
               </button>
               <p className="hint">
-                {p.brand ?? titulo(rootOf(p.main_category_id, byId))} &middot; {p.variant_count} variantes
+                {p.brand ?? titulo(rootOf(p.main_category_id, byId))} &middot; {p.variant_count} variants
               </p>
               <p className="precio">
-                {precio === undefined ? "..." : precio === null ? "sin precio" : `desde $${precio.toFixed(2)}`}
+                {precio === undefined ? "..." : precio === null ? "no price" : `from $${precio.toFixed(2)}`}
               </p>
               <div className="cat-actions">
-                <button className="btn" onClick={() => setAbierto(p)}>Ver</button>
-                <button className="btn" disabled title="Falta el cambio a wrapDegrees">
-                  Importar
+                <button className="btn" onClick={() => setAbierto(p)}>View</button>
+                <button className="btn" disabled title="Blocked on the wrapDegrees change">
+                  Import
                 </button>
               </div>
             </article>
@@ -232,11 +232,11 @@ export function Productos({ api }: Props) {
       </div>
 
       {filtrados.length > VISIBLES && (
-        <p className="hint">Mostrando {VISIBLES}. Afina la busqueda para ver el resto.</p>
+        <p className="hint">Showing {VISIBLES}. Narrow the search to see the rest.</p>
       )}
-      {filtrados.length === 0 && <p className="hint">Nada coincide con esa busqueda.</p>}
+      {filtrados.length === 0 && <p className="hint">Nothing matches that search.</p>}
 
-      {abierto && <Detalle api={api} product={abierto} onClose={() => setAbierto(null)} />}
+      {abierto && <ProductDetail api={api} product={abierto} onClose={() => setAbierto(null)} />}
     </div>
   );
 }

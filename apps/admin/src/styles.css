@@ -391,6 +391,36 @@ input:focus { border-color: var(--senal); }
 }
 .desc { line-height: 1.65; }
 
+/* Some products have 200+ variants: the list scrolls instead of running off. */
+.tabla-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+}
+.tabla-scroll .tabla th {
+  position: sticky;
+  top: 0;
+  background: var(--negro);
+  padding-left: 8px;
+}
+.tabla-scroll .tabla td { padding-left: 8px; }
+
+.fila-click { cursor: pointer; }
+.fila-click:hover td { background: color-mix(in srgb, var(--hueso) 6%, transparent); }
+.fila-click[data-on="true"] td {
+  background: color-mix(in srgb, var(--senal) 16%, transparent);
+  color: var(--hueso);
+}
+
+.caption {
+  font-family: var(--dato);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: color-mix(in srgb, var(--hueso) 50%, transparent);
+  text-align: center;
+}
+
 .tabla { width: 100%; border-collapse: collapse; font-size: 12px; }
 .tabla th {
   text-align: left;
