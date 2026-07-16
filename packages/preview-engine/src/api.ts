@@ -20,15 +20,27 @@ export interface PrintfulStatus {
 
 export interface CatalogProduct {
   id: number;
+  type: string;
+  main_category_id: number;
   name: string;
   brand: string | null;
+  model: string | null;
   image: string;
   variant_count: number;
+  is_discontinued: boolean;
+  description: string;
+  techniques?: Array<{ key: string; display_name: string }>;
 }
 
 export interface CatalogPage {
   data: CatalogProduct[];
   paging?: { total: number; offset: number; limit: number };
+}
+
+export interface Category {
+  id: number;
+  parent_id: number | null;
+  title: string;
 }
 
 export class ApiClient {
@@ -45,6 +57,32 @@ export class ApiClient {
 
   catalog(offset = 0, limit = 20) {
     return this.req<CatalogPage>(`/api/printful/catalog?offset=${offset}&limit=${limit}`);
+  }
+
+  categories() {
+    return this.req<{ data: Category[] }>("/api/printful/categories");
+  }
+
+  /**
+   * Trae el catalogo entero.
+   *
+   * La API v2 no busca por nombre, solo filtra por categoria/color/tecnica. Con ~500
+   * productos sale mas barato bajarlos todos una vez y filtrar en el navegador que
+   * pegarle a Printful en cada tecla.
+   */
+  async fullCatalog(onProgress?: (loaded: number, total: number) => void) {
+    const first = await this.catalog(0, 100);
+    const total = first.paging?.total ?? first.data.length;
+    onProgress?.(first.data.length, total);
+
+    const rest = await Promise.all(
+      Array.from({ length: Math.ceil((total - 100) / 100) }, (_, i) =>
+        this.catalog((i + 1) * 100, 100),
+      ),
+    );
+    const all = [...first.data, ...rest.flatMap((p) => p.data)];
+    onProgress?.(all.length, total);
+    return all;
   }
 
   catalogProduct(id: number) {

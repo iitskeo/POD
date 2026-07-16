@@ -58,6 +58,10 @@ body {
   align-items: start;
 }
 
+/* `display: grid` gana sobre la regla del user agent para [hidden], asi que sin
+   esto el compositor seguia visible debajo del catalogo. */
+.admin-grid[hidden] { display: none; }
+
 @media (max-width: 1100px) {
   .admin-grid { grid-template-columns: 1fr; }
 }
@@ -268,8 +272,39 @@ input:focus { border-color: var(--senal); }
 }
 .connect-card .hint { margin-left: auto; margin-right: auto; }
 
-.catalogo-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
-.pager { display: flex; align-items: center; gap: 10px; }
+.filtros { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.buscador { flex: 1; min-width: 240px; font-size: 14px; padding: 11px 12px; }
+
+select {
+  background: var(--carbon);
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+  color: var(--hueso);
+  font-family: var(--cuerpo);
+  font-size: 13px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 4px; }
+.chips button {
+  background: var(--carbon);
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--hueso) 65%, transparent);
+  font-family: var(--dato);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.chips button:hover { color: var(--hueso); border-color: color-mix(in srgb, var(--hueso) 35%, transparent); }
+.chips button[data-on="true"] {
+  color: var(--negro);
+  background: var(--senal);
+  border-color: var(--senal);
+}
 
 .cat-grid {
   display: grid;

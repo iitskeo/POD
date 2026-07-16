@@ -117,8 +117,14 @@ async function printfulRoutes(
   const store = await currentStore(env);
   if (!store) return json({ error: "Printful no esta conectado" }, { status: 409 }, headers);
 
+  if (path === "/api/printful/categories") {
+    // Sin limit devuelve solo 20 y el arbol queda cortado.
+    const data = await call<unknown>(env, store, "/v2/catalog-categories?limit=100");
+    return json(data, {}, headers);
+  }
+
   if (path === "/api/printful/catalog") {
-    const data = await call<unknown>(store, catalogPath(url.searchParams));
+    const data = await call<unknown>(env, store, catalogPath(url.searchParams));
     return json(data, {}, headers);
   }
 
@@ -131,11 +137,11 @@ async function printfulRoutes(
     // mockup-styles trae print_area_width/height: las medidas del template, que es
     // justo lo que hoy esta hardcodeado.
     const [product, styles, variants] = await Promise.all([
-      call<unknown>(store, `/v2/catalog-products/${id}?${rq}`),
-      call<unknown>(store, `/v2/catalog-products/${id}/mockup-styles?${rq}`).catch((e) => ({
+      call<unknown>(env, store, `/v2/catalog-products/${id}?${rq}`),
+      call<unknown>(env, store, `/v2/catalog-products/${id}/mockup-styles?${rq}`).catch((e) => ({
         error: e instanceof Error ? e.message : String(e),
       })),
-      call<unknown>(store, `/v2/catalog-products/${id}/catalog-variants?${rq}&limit=5`).catch(
+      call<unknown>(env, store, `/v2/catalog-products/${id}/catalog-variants?${rq}&limit=5`).catch(
         (e) => ({ error: e instanceof Error ? e.message : String(e) }),
       ),
     ]);
