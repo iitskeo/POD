@@ -34,6 +34,7 @@ uniform float u_yEnd;        // ultima fila
 uniform float u_shading;     // 0 = sin shading, 1 = foto tal cual
 uniform float u_safeSin;     // sin(safeAngle): limite de la zona segura
 uniform float u_showSafe;    // 1 = dibuja la guia de zona segura (admin)
+uniform float u_wrapRad;     // radianes del producto que cubre el ancho del archivo
 
 const float PI = 3.14159265359;
 
@@ -51,7 +52,11 @@ void main() {
   if (abs(s) >= 1.0) return;           // fuera de la silueta
 
   float theta = asin(s);               // cara frontal: -pi/2 .. pi/2
-  float u = theta / (2.0 * PI) + 0.5;
+
+  // El archivo cubre u_wrapRad del producto, no siempre la vuelta entera: una taza
+  // con asa imprime ~320 grados. Fuera de esa banda no hay arte que dibujar.
+  if (abs(theta) > u_wrapRad * 0.5) return;
+  float u = theta / u_wrapRad + 0.5;
   float v = (px.y - u_yStart) / (u_yEnd - u_yStart);
 
   // art viene premultiplicado: art.rgb ya esta multiplicado por art.a.

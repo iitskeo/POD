@@ -57,7 +57,14 @@ export function Preview({ design, values, composer }: Props) {
     let stale = false;
     (async () => {
       await composer.draw(artRef.current, design, values, 0.5);
-      if (!stale) r.render({ profile, band, art: artRef.current });
+      if (!stale) {
+        r.render({
+          profile,
+          band,
+          art: artRef.current,
+          wrapDegrees: design.spec.wrapDegrees ?? 360,
+        });
+      }
     })();
     return () => { stale = true; };
   }, [design, values, profile, band, composer]);

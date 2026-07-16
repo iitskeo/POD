@@ -96,13 +96,20 @@ export function defaultValues(design: Design): SlotValues {
   return v;
 }
 
-/** Ancho utilizable del archivo: solo la porcion que se ve de frente. */
-export function safeWidthFrac(safeAngleDeg: number, wraps360: boolean): number {
-  return wraps360 ? (2 * safeAngleDeg) / 360 : 1;
+/**
+ * Fraccion del ancho del archivo que se ve de frente.
+ *
+ * El archivo cubre `wrapDegrees` del producto; de esos, solo son legibles los
+ * `2*safeAngleDeg` centrales. Si el archivo envuelve menos que la zona legible,
+ * se ve entero.
+ */
+export function safeWidthFrac(safeAngleDeg: number, wrapDegrees: number | null): number {
+  if (!wrapDegrees) return 1; // superficie plana: no hay curvatura que recorte
+  return Math.min(1, (2 * safeAngleDeg) / wrapDegrees);
 }
 
 /** Rectangulo de la zona segura, en coordenadas del archivo. */
 export function safeRect(design: Design): Rect {
-  const w = design.spec.widthPx * safeWidthFrac(design.safeAngleDeg, design.spec.wraps360);
+  const w = design.spec.widthPx * safeWidthFrac(design.safeAngleDeg, design.spec.wrapDegrees);
   return { x: (design.spec.widthPx - w) / 2, y: 0, w, h: design.spec.heightPx };
 }

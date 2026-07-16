@@ -1,9 +1,9 @@
-import {
+﻿import {
   ApiClient,
   DEFAULT_CALIBRATION,
   DesignComposer,
   SEED_ASSETS,
-  WINE_TUMBLER_11OZ,
+  WINE_TUMBLER,
   defaultValues,
   safeRect,
   seedLibrary,
@@ -34,7 +34,7 @@ const DESIGN_ID = "terminal";
 const EMPTY: Design = {
   id: DESIGN_ID,
   name: "Terminal",
-  spec: WINE_TUMBLER_11OZ,
+  spec: WINE_TUMBLER,
   safeAngleDeg: DEFAULT_CALIBRATION.safeAngleDeg,
   elements: [],
 };

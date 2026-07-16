@@ -85,12 +85,12 @@ export function ProductDetail({ api, product, onClose }: Props) {
               <span className="hint" style={{ display: "inline" }}>{prices?.currency ?? ""}</span>
             </p>
 
-            <button className="cta wide" disabled title="Blocked on the wrapDegrees change">
+            <button className="cta wide" disabled title="Not wired up yet">
               Import product
             </button>
             <p className="hint">
-              Import unlocks once wraps360 becomes wrapDegrees: this product does not wrap
-              a full 360&deg; and would map incorrectly.
+              The engine now handles partial wraps. Wiring import to R2 and the products
+              table is next.
             </p>
           </div>
 

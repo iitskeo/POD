@@ -15,8 +15,10 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string) {
 export interface RenderInput {
   profile: Profile;
   band: PrintBand;
-  /** Arte plano: el archivo de impresion completo (envoltura 360). */
+  /** Arte plano: el archivo de impresion completo. */
   art: TexImageSource;
+  /** Grados del producto que cubre el ancho del arte. 360 = vuelta completa. */
+  wrapDegrees: number;
   calibration?: Calibration;
   /** Dibuja la guia de zona segura. Solo el admin la usa. */
   showSafeZone?: boolean;
@@ -56,7 +58,7 @@ export class PreviewRenderer {
     gl.useProgram(program);
 
     for (const name of ["u_photo", "u_art", "u_radii", "u_photoSize", "u_cx",
-      "u_yStart", "u_yEnd", "u_shading", "u_safeSin", "u_showSafe"]) {
+      "u_yStart", "u_yEnd", "u_shading", "u_safeSin", "u_showSafe", "u_wrapRad"]) {
       this.uniforms[name] = gl.getUniformLocation(program, name);
     }
 
@@ -145,6 +147,7 @@ export class PreviewRenderer {
     gl.uniform1f(this.uniforms.u_shading, cal.shadingStrength);
     gl.uniform1f(this.uniforms.u_safeSin, Math.sin(cal.safeAngleDeg * Math.PI / 180));
     gl.uniform1f(this.uniforms.u_showSafe, input.showSafeZone ? 1 : 0);
+    gl.uniform1f(this.uniforms.u_wrapRad, (input.wrapDegrees * Math.PI) / 180);
 
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

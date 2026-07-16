@@ -1,10 +1,10 @@
-import {
+﻿import {
   ApiClient,
   DEFAULT_CALIBRATION,
   DesignComposer,
   PreviewRenderer,
   SEED_ASSETS,
-  WINE_TUMBLER_11OZ,
+  WINE_TUMBLER,
   defaultValues,
   diameterFromWrap,
   extractProfile,
@@ -55,9 +55,9 @@ export function App() {
 
   const band = useMemo(() => {
     if (!profile) return null;
-    const diameter = diameterFromWrap(WINE_TUMBLER_11OZ.widthPx / WINE_TUMBLER_11OZ.dpi);
+    const diameter = diameterFromWrap(WINE_TUMBLER.widthPx / WINE_TUMBLER.dpi);
     const ppi = pixelsPerInch(profile, diameter);
-    const heightIn = WINE_TUMBLER_11OZ.heightPx / WINE_TUMBLER_11OZ.dpi;
+    const heightIn = WINE_TUMBLER.heightPx / WINE_TUMBLER.dpi;
     return { yStart: profile.yTop, height: heightIn * ppi };
   }, [profile]);
 
@@ -79,7 +79,7 @@ export function App() {
         const d: Design = {
           id: stored.id,
           name: stored.name,
-          spec: WINE_TUMBLER_11OZ,
+          spec: WINE_TUMBLER,
           safeAngleDeg: DEFAULT_CALIBRATION.safeAngleDeg,
           elements: stored.elements,
         };
@@ -105,7 +105,12 @@ export function App() {
       const res = await composer.draw(artRef.current, design, values, 0.5);
       if (stale) return;
       setOverflow(res.overflow);
-      renderer.render({ profile, band, art: artRef.current });
+      renderer.render({
+        profile,
+        band,
+        art: artRef.current,
+        wrapDegrees: design.spec.wrapDegrees ?? 360,
+      });
     })();
     return () => { stale = true; };
   }, [design, profile, band, values, composer]);
@@ -124,7 +129,7 @@ export function App() {
   }
 
   const safePct = Math.round(
-    safeWidthFrac(DEFAULT_CALIBRATION.safeAngleDeg, WINE_TUMBLER_11OZ.wraps360) * 100,
+    safeWidthFrac(DEFAULT_CALIBRATION.safeAngleDeg, WINE_TUMBLER.wrapDegrees) * 100,
   );
   const textEls = design?.elements.filter((e) => e.kind === "text" && !e.fixed) ?? [];
   const incompleto = textEls.some((e) => !(values[e.id] ?? "").trim());
