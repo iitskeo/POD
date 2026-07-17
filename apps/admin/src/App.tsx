@@ -14,6 +14,7 @@
   type DesignElement,
   type Rect,
   type SlotValues,
+  type StoredProduct,
   type TextElement,
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useState } from "react";
@@ -28,38 +29,67 @@ const PALETTE = ["#0A0A0A", "#161616", "#F5F5F0", "#FFFFFF", "#E4E4DC", "#FF5A1F
 
 const DESIGN_ID = "terminal";
 
-/**
- * The product is hardcoded until the Printful import exists.
- * Its measurements come from Printful's Wine Tumbler catalog entry.
- */
-const EMPTY: Design = {
-  id: DESIGN_ID,
-  name: "Terminal",
-  spec: WINE_TUMBLER,
-  safeAngleDeg: DEFAULT_CALIBRATION.safeAngleDeg,
-  elements: [],
-};
-
 function uid() {
   return crypto.randomUUID().slice(0, 8);
 }
 
 export function App() {
   const composer = useMemo(() => new DesignComposer(seedLibrary()), []);
-  const [design, setDesign] = useState<Design>(EMPTY);
+  const [products, setProducts] = useState<StoredProduct[]>([]);
+  const [productId, setProductId] = useState<string | null>(null);
+  const [name, setName] = useState("Terminal");
+  const [elements, setElements] = useState<DesignElement[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [values, setValues] = useState<SlotValues>({});
   const [status, setStatus] = useState<string>("");
   // The OAuth callback returns with ?printful=..., so open on Products.
-  const [view, setVista] = useState<"composer" | "products">(() =>
+  const [view, setView] = useState<"composer" | "products">(() =>
     new URLSearchParams(location.search).has("printful") ? "products" : "composer",
   );
 
   useEffect(() => {
+    // A product without a photo cannot be previewed, so it cannot be designed on.
+    api.listProducts()
+      .then((ps) => {
+        const usable = ps.filter((p) => p.hasPhoto);
+        setProducts(usable);
+        setProductId((cur) => cur ?? usable[0]?.id ?? null);
+      })
+      .catch((e) => setStatus(`Could not load products: ${e.message}`));
+  }, []);
+
+  useEffect(() => {
     api.getDesign(DESIGN_ID)
-      .then((d) => setDesign({ ...EMPTY, name: d.name, elements: d.elements }))
+      .then((d) => {
+        setName(d.name);
+        setElements(d.elements);
+        if (d.productId) setProductId(d.productId);
+      })
       .catch(() => setStatus("New design (nothing was saved yet)"));
   }, []);
+
+  const product = products.find((p) => p.id === productId) ?? null;
+
+  /**
+   * The spec comes from the product, not a constant: every import carries its own
+   * print file measurements, and they differ per product and per provider.
+   */
+  const design: Design = useMemo(
+    () => ({
+      id: DESIGN_ID,
+      name,
+      spec: product?.printSpec ?? WINE_TUMBLER,
+      safeAngleDeg: product?.calibration?.safeAngleDeg ?? DEFAULT_CALIBRATION.safeAngleDeg,
+      elements,
+    }),
+    [name, product, elements],
+  );
+
+  const setDesign = (fn: (d: Design) => Design) => {
+    const next = fn(design);
+    setName(next.name);
+    setElements(next.elements);
+  };
 
   // Sample text survives edits, but colors and icons must NOT: they have to follow
   // the slot default. Keeping them made the admin show a stale value while the
@@ -141,11 +171,15 @@ export function App() {
     });
 
   const save = async (publish: boolean) => {
+    if (!productId) {
+      setStatus("Import a product first.");
+      return;
+    }
     setStatus("Saving...");
     try {
       await api.saveDesign({
         id: design.id,
-        productId: "wine-tumbler-11oz",
+        productId,
         name: design.name,
         slug: design.id,
         priceCents: 2495,
@@ -164,15 +198,27 @@ export function App() {
       <header className="topbar">
         <div className="brand">Abbiss</div>
         <nav className="tabs">
-          <button data-on={view === "composer"} onClick={() => setVista("composer")}>
+          <button data-on={view === "composer"} onClick={() => setView("composer")}>
             Composer
           </button>
-          <button data-on={view === "products"} onClick={() => setVista("products")}>
+          <button data-on={view === "products"} onClick={() => setView("products")}>
             Products
           </button>
         </nav>
         {view === "composer" && (
           <>
+            <select
+              value={productId ?? ""}
+              onChange={(e) => setProductId(e.target.value)}
+              title="The product this design is printed on"
+            >
+              {products.length === 0 && <option value="">No products imported</option>}
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
             <input
               className="name-input"
               value={design.name}
@@ -238,7 +284,27 @@ export function App() {
         </main>
 
         <aside className="props">
-          <Preview design={design} values={values} composer={composer} />
+          {product ? (
+            <Preview
+              design={design}
+              values={values}
+              composer={composer}
+              photoUrl={api.productPhotoUrl(product.id)}
+            />
+          ) : (
+            <p className="hint">
+              No product imported yet. Go to Products, connect Printful and import one.
+            </p>
+          )}
+          {product && (
+            <p className="hint">
+              {product.printSpec.widthPx}&times;{product.printSpec.heightPx}px &middot;{" "}
+              {product.printSpec.dpi}dpi &middot;{" "}
+              {product.printSpec.wrapDegrees
+                ? `${product.printSpec.wrapDegrees}° wrap`
+                : "flat"}
+            </p>
+          )}
 
           {!selected && <p className="hint">Select an element to configure it.</p>}
 
