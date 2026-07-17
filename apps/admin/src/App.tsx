@@ -91,6 +91,46 @@ export function App() {
     setElements(next.elements);
   };
 
+  /**
+   * A design belongs to one product.
+   *
+   * Element rects are in print file coordinates, and every product has its own file:
+   * the Wine Tumbler is 3175x950 and the Tapered 2795x2100. Carrying rects across
+   * does not reposition the design, it scatters it. Switching starts fresh, and asks
+   * first when there is work to lose.
+   */
+  const switchProduct = (id: string) => {
+    if (id === productId) return;
+    if (
+      elements.length > 0 &&
+      !confirm(
+        "This design was laid out for the current product's print file. " +
+          "Switching starts an empty design for the new one. Continue?",
+      )
+    ) {
+      return;
+    }
+    setElements([]);
+    setSelectedId(null);
+    setProductId(id);
+    setStatus("");
+  };
+
+  const setWrap = async (wrapDegrees: number | null) => {
+    if (!product) return;
+    // Optimistic: the preview has to move while the slider moves.
+    setProducts((ps) =>
+      ps.map((p) =>
+        p.id === product.id ? { ...p, printSpec: { ...p.printSpec, wrapDegrees } } : p,
+      ),
+    );
+    try {
+      await api.updateProduct(product.id, { wrapDegrees });
+    } catch (e) {
+      setStatus(`Could not save the wrap: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   // Sample text survives edits, but colors and icons must NOT: they have to follow
   // the slot default. Keeping them made the admin show a stale value while the
   // customer saw the new one, and an admin that approves something other than what
@@ -209,7 +249,7 @@ export function App() {
           <>
             <select
               value={productId ?? ""}
-              onChange={(e) => setProductId(e.target.value)}
+              onChange={(e) => switchProduct(e.target.value)}
               title="The product this design is printed on"
             >
               {products.length === 0 && <option value="">No products imported</option>}
@@ -297,13 +337,46 @@ export function App() {
             </p>
           )}
           {product && (
-            <p className="hint">
-              {product.printSpec.widthPx}&times;{product.printSpec.heightPx}px &middot;{" "}
-              {product.printSpec.dpi}dpi &middot;{" "}
-              {product.printSpec.wrapDegrees
-                ? `${product.printSpec.wrapDegrees}° wrap`
-                : "flat"}
-            </p>
+            <>
+              <p className="hint">
+                {product.printSpec.widthPx}&times;{product.printSpec.heightPx}px &middot;{" "}
+                {product.printSpec.dpi}dpi &middot; {product.source}
+              </p>
+
+              <div className="field">
+                <span className="eyebrow">
+                  Wrap{" "}
+                  {product.printSpec.wrapDegrees
+                    ? `${Math.round(product.printSpec.wrapDegrees)}°`
+                    : "— flat"}
+                </span>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={product.printSpec.wrapDegrees === null}
+                    onChange={(e) => setWrap(e.target.checked ? null : 360)}
+                  />
+                  Flat surface (tee, poster)
+                </label>
+                {product.printSpec.wrapDegrees !== null && (
+                  <>
+                    <input
+                      type="range"
+                      min={90}
+                      max={360}
+                      step={5}
+                      value={product.printSpec.wrapDegrees}
+                      onChange={(e) => setWrap(Number(e.target.value))}
+                    />
+                    <p className="hint">
+                      How much of the product the print file goes around. Printful gives
+                      the print width but not the diameter, so this starts as a guess:
+                      widen it until the design sits where it should.
+                    </p>
+                  </>
+                )}
+              </div>
+            </>
           )}
 
           {!selected && <p className="hint">Select an element to configure it.</p>}

@@ -113,7 +113,15 @@ export function pixelsPerInch(profile: Profile, diameterInches: number): number 
   return (profile.rMax * 2) / diameterInches;
 }
 
-/** Implied diameter when the file width is the circumference. */
-export function diameterFromWrap(printWidthInches: number): number {
-  return printWidthInches / Math.PI;
+/**
+ * Product diameter implied by a print file `printWidthInches` wide that goes
+ * `wrapDegrees` around it.
+ *
+ * The file width is only the full circumference at 360. A 9.32in file that wraps 305
+ * implies an 11in circumference, not 9.32: assuming a full turn shrinks the implied
+ * diameter and every measurement derived from it, including the print band's height.
+ */
+export function diameterFromWrap(printWidthInches: number, wrapDegrees = 360): number {
+  const circumference = printWidthInches * (360 / wrapDegrees);
+  return circumference / Math.PI;
 }

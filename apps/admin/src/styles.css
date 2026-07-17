@@ -448,6 +448,13 @@ input:focus { border-color: var(--senal); }
   vertical-align: middle;
 }
 
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--senal);
+  margin: 8px 0 2px;
+  cursor: pointer;
+}
+
 .check {
   display: flex;
   align-items: center;

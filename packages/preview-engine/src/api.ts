@@ -187,6 +187,19 @@ export class ApiClient {
     return this.req<StoredProduct[]>("/api/products");
   }
 
+  /**
+   * Corrects a product's calibration.
+   *
+   * The wrap is not derivable from Printful's data, so it is imported as a guess and
+   * fixed here against the preview.
+   */
+  updateProduct(id: string, patch: { wrapDegrees?: number | null; safeAngleDeg?: number }) {
+    return this.req<StoredProduct>(`/api/products/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
   productPhotoUrl(id: string) {
     return `${this.base}/api/products/${id}/photo`;
   }
@@ -213,6 +226,7 @@ export class ApiClient {
     const res = await fetch(`${this.base}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      cache: "no-store",
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: res.statusText }));

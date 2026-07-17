@@ -32,9 +32,10 @@ export function Preview({ design, values, composer, photoUrl }: Props) {
 
   const band = useMemo(() => {
     if (!profile) return null;
-    const diameter = diameterFromWrap(design.spec.widthPx / design.spec.dpi);
+    const { widthPx, heightPx, dpi, wrapDegrees } = design.spec;
+    const diameter = diameterFromWrap(widthPx / dpi, wrapDegrees ?? 360);
     const ppi = pixelsPerInch(profile, diameter);
-    return { yStart: profile.yTop, height: (design.spec.heightPx / design.spec.dpi) * ppi };
+    return { yStart: profile.yTop, height: (heightPx / dpi) * ppi };
   }, [profile, design.spec]);
 
   // Reruns per product: each one has its own photo, and so its own R(y).

@@ -55,10 +55,10 @@ export function App() {
 
   const band = useMemo(() => {
     if (!profile) return null;
-    const diameter = diameterFromWrap(WINE_TUMBLER.widthPx / WINE_TUMBLER.dpi);
+    const { widthPx, heightPx, dpi, wrapDegrees } = WINE_TUMBLER;
+    const diameter = diameterFromWrap(widthPx / dpi, wrapDegrees ?? 360);
     const ppi = pixelsPerInch(profile, diameter);
-    const heightIn = WINE_TUMBLER.heightPx / WINE_TUMBLER.dpi;
-    return { yStart: profile.yTop, height: heightIn * ppi };
+    return { yStart: profile.yTop, height: (heightPx / dpi) * ppi };
   }, [profile]);
 
   useEffect(() => {

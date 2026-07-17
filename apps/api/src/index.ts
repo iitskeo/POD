@@ -30,7 +30,7 @@ function cors(origin: string | null, env: Env): HeadersInit {
     .map((s) => s.trim());
   return {
     "Access-Control-Allow-Origin": origin && allowed.includes(origin) ? origin : allowed[0],
-    "Access-Control-Allow-Methods": "GET,PUT,POST,DELETE,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,PUT,PATCH,POST,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };
 }
@@ -352,6 +352,44 @@ export default {
             "Cache-Control": "public, max-age=3600",
           },
         });
+      }
+
+      // The wrap cannot be derived from Printful's data (it gives the print width but
+      // not the diameter), so the admin corrects it against the preview.
+      const patch = path.match(/^\/api\/products\/([\w-]+)$/);
+      if (patch && req.method === "PATCH") {
+        const row = await env.DB.prepare("SELECT * FROM products WHERE id = ?")
+          .bind(patch[1]).first<ProductRow>();
+        if (!row) return json({ error: "not found" }, { status: 404 }, headers);
+
+        const body = (await req.json()) as { wrapDegrees?: number | null; safeAngleDeg?: number };
+        const spec = JSON.parse(row.print_spec) as Record<string, unknown>;
+        const cal = row.calibration
+          ? (JSON.parse(row.calibration) as Record<string, unknown>)
+          : { shadingStrength: 1, safeAngleDeg: 45 };
+
+        if ("wrapDegrees" in body) {
+          const w = body.wrapDegrees;
+          if (w !== null && (typeof w !== "number" || w <= 0 || w > 360)) {
+            return json({ error: "wrapDegrees must be null or 0-360" }, { status: 400 }, headers);
+          }
+          spec.wrapDegrees = w;
+        }
+        if (typeof body.safeAngleDeg === "number") cal.safeAngleDeg = body.safeAngleDeg;
+
+        await env.DB.prepare(
+          "UPDATE products SET print_spec = ?1, calibration = ?2, surface = ?3, updated_at = ?4 WHERE id = ?5",
+        ).bind(
+          JSON.stringify(spec),
+          JSON.stringify(cal),
+          spec.wrapDegrees === null ? "flat" : "revolution",
+          Date.now(),
+          patch[1],
+        ).run();
+
+        const updated = await env.DB.prepare("SELECT * FROM products WHERE id = ?")
+          .bind(patch[1]).first<ProductRow>();
+        return json(rowToProduct(updated!), {}, headers);
       }
 
       if (path === "/api/products" && req.method === "GET") {
