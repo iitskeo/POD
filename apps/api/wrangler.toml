@@ -5,13 +5,19 @@ compatibility_date = "2026-07-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "abbiss"
-database_id = "local"
+database_id = "3fc96303-8919-4fbb-ac51-543425e159d6"
 migrations_dir = "migrations"
 
 # Product photos, asset uploads and generated print files.
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "abbiss"
+
+# Deployed URLs. The redirect must also be registered in the Printful app.
+[vars]
+ADMIN_URL = "https://abbiss-admin.kene00vargas.workers.dev"
+PRINTFUL_REDIRECT_URI = "https://abbiss-api.kene00vargas.workers.dev/api/printful/callback"
+ALLOWED_ORIGINS = "https://abbiss.kene00vargas.workers.dev,https://abbiss-admin.kene00vargas.workers.dev,http://localhost:5173,http://localhost:5174"
 
 [dev]
 port = 8787

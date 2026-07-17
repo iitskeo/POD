@@ -22,7 +22,8 @@ import { Canvas } from "./Canvas";
 import { MockupPreview } from "./MockupPreview";
 import { Products } from "./Products";
 
-const api = new ApiClient("http://localhost:8787");
+// Deployed builds inject VITE_API_BASE; local dev falls back to the dev Worker.
+const api = new ApiClient(import.meta.env.VITE_API_BASE ?? "http://localhost:8787");
 
 /** Brand palette. The admin picks from here which colors each slot offers. */
 const PALETTE = ["#0A0A0A", "#161616", "#F5F5F0", "#FFFFFF", "#E4E4DC", "#FF5A1F"];

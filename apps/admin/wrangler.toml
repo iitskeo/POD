@@ -1,0 +1,7 @@
+name = "abbiss-admin"
+compatibility_date = "2026-07-01"
+
+# Static SPA served from Workers assets. SPA fallback so query-param routes resolve.
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"

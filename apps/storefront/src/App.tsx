@@ -18,7 +18,8 @@
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const api = new ApiClient("http://localhost:8787");
+// Deployed builds inject VITE_API_BASE; local dev falls back to the dev Worker.
+const api = new ApiClient(import.meta.env.VITE_API_BASE ?? "http://localhost:8787");
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
