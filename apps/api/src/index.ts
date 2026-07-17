@@ -19,6 +19,7 @@ import {
   createMockupTask,
   defaultWrapDegrees,
   exchangeCode,
+  fetchTemplate,
   type MockupTask,
   type PrintFileStyle,
   type StoreRow,
@@ -284,12 +285,13 @@ async function importProduct(
   rq: string,
   headers: HeadersInit,
 ): Promise<Response> {
-  const { productId, variantId, photoUrl } = body;
+  const { productId, photoUrl } = body;
   if (!photoUrl) return json({ error: "photoUrl is required" }, { status: 400 }, headers);
 
-  const [prodRes, stylesRes] = await Promise.all([
+  const [prodRes, stylesRes, variantsRes] = await Promise.all([
     call<{ data?: { name: string; type: string } }>(env, store, `/v2/catalog-products/${productId}?${rq}`),
     call<{ data?: PrintFileStyle[] }>(env, store, `/v2/catalog-products/${productId}/mockup-styles?${rq}`),
+    call<{ data?: Array<{ id: number }> }>(env, store, `/v2/catalog-products/${productId}/catalog-variants?${rq}&limit=1`),
   ]);
   const product = prodRes.data ?? (prodRes as unknown as { name: string; type: string });
   const styles = stylesRes.data ?? [];
@@ -297,6 +299,14 @@ async function importProduct(
   if (!printFile) {
     return json({ error: "Printful gave no print file measurements" }, { status: 422 }, headers);
   }
+
+  // The mockup generator needs a variant, so import always captures one: the chosen
+  // one, or the first. A product-level import used to leave it null and mockups failed.
+  const variantId = body.variantId ?? variantsRes.data?.[0]?.id;
+  if (!variantId) {
+    return json({ error: "Printful gave no variant for this product" }, { status: 422 }, headers);
+  }
+  const template = await fetchTemplate(store, productId, variantId);
 
   const photo = await fetch(photoUrl);
   if (!photo.ok) {
@@ -322,26 +332,32 @@ async function importProduct(
   await env.DB.prepare(
     `INSERT INTO products
        (id, name, slug, status, source, external_product_id, external_variant_id,
-        photo_key, surface, print_band, calibration, print_spec, store_id,
+        photo_key, surface, print_band, calibration, print_spec, template, store_id,
         created_at, updated_at)
-     VALUES (?1,?2,?3,'draft','printful',?4,?5,?6,?7,NULL,?8,?9,?10,?11,?11)
+     VALUES (?1,?2,?3,'draft','printful',?4,?5,?6,?7,NULL,?8,?9,?10,?11,?12,?12)
      ON CONFLICT(id) DO UPDATE SET
-       name = ?2, photo_key = ?6, surface = ?7, print_spec = ?9, updated_at = ?11`,
+       name = ?2, photo_key = ?6, surface = ?7, print_spec = ?9, template = ?10,
+       external_variant_id = ?5, updated_at = ?12`,
   ).bind(
     id,
     name,
     slugify(`${name}-${productId}`),
     String(productId),
-    variantId ? String(variantId) : null,
+    String(variantId),
     photoKey,
     surface,
     JSON.stringify({ shadingStrength: 1, safeAngleDeg: 45 }),
     JSON.stringify(spec),
+    template ? JSON.stringify(template) : null,
     store.id,
     now,
   ).run();
 
-  return json({ id, name, photoKey, printSpec: spec, surface, technique: printFile.technique }, {}, headers);
+  return json(
+    { id, name, photoKey, printSpec: spec, surface, technique: printFile.technique, hasTemplate: !!template },
+    {},
+    headers,
+  );
 }
 
 interface ProductRow {
@@ -357,6 +373,7 @@ interface ProductRow {
   print_band: string | null;
   calibration: string | null;
   print_spec: string;
+  template: string | null;
 }
 
 function rowToProduct(r: ProductRow) {
@@ -373,6 +390,7 @@ function rowToProduct(r: ProductRow) {
     printBand: r.print_band ? JSON.parse(r.print_band) : null,
     calibration: r.calibration ? JSON.parse(r.calibration) : null,
     printSpec: JSON.parse(r.print_spec),
+    template: r.template ? JSON.parse(r.template) : null,
   };
 }
 

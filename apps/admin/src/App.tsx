@@ -6,7 +6,6 @@
   WINE_TUMBLER,
   defaultValues,
   elementLabel,
-  safeRect,
   seedLibrary,
   svgDataUrl,
   type AssetElement,
@@ -17,7 +16,7 @@
   type StoredProduct,
   type TextElement,
 } from "@abbiss/preview-engine";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "./Canvas";
 import { MockupPreview } from "./MockupPreview";
 import { Products } from "./Products";
@@ -93,25 +92,17 @@ export function App() {
   };
 
   /**
-   * A design belongs to one product.
-   *
-   * Element rects are in print file coordinates, and every product has its own file:
-   * the Wine Tumbler is 3175x950 and the Tapered 2795x2100. Carrying rects across
-   * does not reposition the design, it scatters it. Switching starts fresh, and asks
-   * first when there is work to lose.
+   * A design belongs to one product: element rects are in that product's print file
+   * coordinates, and each product has its own file. Rather than a blocking confirm
+   * that scattered or discarded the work, each product keeps its own in-progress
+   * elements, so switching back and forth loses nothing. (A native confirm also wedged
+   * the whole page on a dialog.)
    */
+  const draftsRef = useRef<Map<string, DesignElement[]>>(new Map());
   const switchProduct = (id: string) => {
     if (id === productId) return;
-    if (
-      elements.length > 0 &&
-      !confirm(
-        "This design was laid out for the current product's print file. " +
-          "Switching starts an empty design for the new one. Continue?",
-      )
-    ) {
-      return;
-    }
-    setElements([]);
+    if (productId) draftsRef.current.set(productId, elements);
+    setElements(draftsRef.current.get(id) ?? []);
     setSelectedId(null);
     setProductId(id);
     setStatus("");
@@ -134,7 +125,14 @@ export function App() {
   }, [design]);
 
   const selected = design.elements.find((e) => e.id === selectedId) ?? null;
-  const safe = safeRect(design);
+  // The whole print file fills the print area now, so new elements center in the file.
+  const cx = design.spec.widthPx / 2;
+  const cy = design.spec.heightPx / 2;
+  // The primary placement drives the editor; front first, else whatever comes first.
+  const placement =
+    product?.template?.placements.find((p) => /front|default/i.test(p.placement)) ??
+    product?.template?.placements[0] ??
+    null;
 
   const patch = (id: string, fn: (el: DesignElement) => DesignElement) =>
     setDesign((d) => ({ ...d, elements: d.elements.map((e) => (e.id === id ? fn(e) : e)) }));
@@ -142,18 +140,14 @@ export function App() {
   const addAsset = (slug: string) => {
     const asset = SEED_ASSETS.find((a) => a.slug === slug)!;
     // Enters at its viewBox aspect: a square box would distort it.
-    const h = asset.category === "shape" ? 470 : 260;
+    const targetH = asset.category === "shape" ? design.spec.heightPx * 0.5 : design.spec.heightPx * 0.3;
+    const h = Math.round(targetH);
     const w = Math.round(h * asset.aspect);
     const el: AssetElement = {
       id: uid(),
       kind: "asset",
       slug,
-      rect: {
-        x: Math.round(safe.x + safe.w / 2 - w / 2),
-        y: Math.round(design.spec.heightPx / 2 - h / 2),
-        w,
-        h,
-      },
+      rect: { x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), w, h },
       recolor: asset.recolorParts.map((part) => ({
         part,
         label: part,
@@ -166,10 +160,12 @@ export function App() {
   };
 
   const addText = () => {
+    const H = design.spec.heightPx;
     const el: TextElement = {
       id: uid(),
       kind: "text",
-      rect: { x: Math.round(safe.x), y: 620, w: Math.round(safe.w), h: 170 },
+      // A band across the lower third of the print file, in file coords.
+      rect: { x: 0, y: Math.round(H * 0.62), w: design.spec.widthPx, h: Math.round(H * 0.2) },
       label: "Your name",
       maxChars: 18,
       minSizeFrac: 0.11,
@@ -304,6 +300,7 @@ export function App() {
             design={design}
             values={values}
             composer={composer}
+            template={placement}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onMove={(id, rect: Rect) => patch(id, (el) => ({ ...el, rect }))}

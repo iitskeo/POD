@@ -95,6 +95,21 @@ export function minPrice(p: ProductPrices): number | null {
   return ok.length ? Math.min(...ok) : null;
 }
 
+/** One placement's flat template: product photo plus the print-area rectangle on it. */
+export interface PlacementTemplate {
+  placement: string;
+  imageUrl: string;
+  backgroundColor: string | null;
+  templateWidth: number;
+  templateHeight: number;
+  printArea: { top: number; left: number; width: number; height: number };
+}
+
+export interface ProductTemplate {
+  variantId: number;
+  placements: PlacementTemplate[];
+}
+
 /** A product as it lives in D1, after import. */
 export interface StoredProduct {
   id: string;
@@ -109,6 +124,8 @@ export interface StoredProduct {
   printBand: { yStart: number; height: number } | null;
   calibration: { shadingStrength: number; safeAngleDeg: number } | null;
   printSpec: PrintSpec;
+  /** Printful's flat template for the live editor. Null for the seeded product. */
+  template: ProductTemplate | null;
 }
 
 export interface ImportedProduct {

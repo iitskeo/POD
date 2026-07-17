@@ -176,6 +176,82 @@ export function defaultWrapDegrees(technique: string): number | null {
   return cylindrical.includes(technique.toLowerCase()) ? 360 : null;
 }
 
+/** One placement's flat template: the product photo plus the print-area rectangle. */
+export interface PlacementTemplate {
+  placement: string;
+  imageUrl: string;
+  backgroundColor: string | null;
+  templateWidth: number;
+  templateHeight: number;
+  printArea: { top: number; left: number; width: number; height: number };
+}
+
+export interface ProductTemplate {
+  variantId: number;
+  placements: PlacementTemplate[];
+}
+
+interface V1TemplateRow {
+  template_id: number;
+  image_url: string | null;
+  background_color: string | null;
+  template_width: number;
+  template_height: number;
+  print_area_width: number;
+  print_area_height: number;
+  print_area_top: number;
+  print_area_left: number;
+}
+
+interface V1TemplatesResult {
+  result: {
+    variant_mapping: Array<{ variant_id: number; templates: Array<{ placement: string; template_id: number }> }>;
+    templates: V1TemplateRow[];
+  };
+}
+
+/**
+ * The v1 templates endpoint gives the print-area position on the product photo, which
+ * v2 does not. It is what lets the editor draw the design on the real product live.
+ */
+export async function fetchTemplate(
+  store: StoreRow,
+  catalogProductId: number,
+  variantId: number,
+): Promise<ProductTemplate | null> {
+  const res = await fetch(
+    `https://api.printful.com/mockup-generator/templates/${catalogProductId}`,
+    { headers: { Authorization: `Bearer ${store.access_token}` } },
+  );
+  if (!res.ok) return null;
+  const { result } = (await res.json()) as V1TemplatesResult;
+
+  const mapping = result.variant_mapping.find((m) => m.variant_id === variantId)
+    ?? result.variant_mapping[0];
+  if (!mapping) return null;
+  const byId = new Map(result.templates.map((t) => [t.template_id, t]));
+
+  const placements: PlacementTemplate[] = [];
+  for (const { placement, template_id } of mapping.templates) {
+    const t = byId.get(template_id);
+    if (!t?.image_url) continue;
+    placements.push({
+      placement,
+      imageUrl: t.image_url,
+      backgroundColor: t.background_color,
+      templateWidth: t.template_width,
+      templateHeight: t.template_height,
+      printArea: {
+        top: t.print_area_top,
+        left: t.print_area_left,
+        width: t.print_area_width,
+        height: t.print_area_height,
+      },
+    });
+  }
+  return placements.length ? { variantId: mapping.variant_id, placements } : null;
+}
+
 export interface MockupTask {
   id: number;
   status: "pending" | "completed" | "failed";
