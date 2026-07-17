@@ -176,6 +176,37 @@ export function defaultWrapDegrees(technique: string): number | null {
   return cylindrical.includes(technique.toLowerCase()) ? 360 : null;
 }
 
+export interface MockupTask {
+  id: number;
+  status: "pending" | "completed" | "failed";
+  catalog_variant_mockups?: Array<{
+    catalog_variant_id: number;
+    mockups: Array<{ placement: string; style_id: number; mockup_url: string }>;
+  }>;
+  failure_reasons?: string[];
+}
+
+/** Creates a mockup task. Async: the result is polled, not returned. */
+export async function createMockupTask(
+  env: Env,
+  store: StoreRow,
+  body: unknown,
+): Promise<MockupTask> {
+  const res = await fetch(`${API}/v2/mockup-tasks`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${store.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new Error(`Printful ${res.status}: ${JSON.stringify(json).slice(0, 300)}`);
+  }
+  return (json.data ?? json) as MockupTask;
+}
+
 export function catalogPath(params: URLSearchParams): string {
   const q = new URLSearchParams();
   q.set("limit", params.get("limit") ?? "20");

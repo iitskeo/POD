@@ -19,7 +19,7 @@
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useState } from "react";
 import { Canvas } from "./Canvas";
-import { Preview } from "./Preview";
+import { MockupPreview } from "./MockupPreview";
 import { Products } from "./Products";
 
 const api = new ApiClient("http://localhost:8787");
@@ -116,20 +116,6 @@ export function App() {
     setStatus("");
   };
 
-  const setWrap = async (wrapDegrees: number | null) => {
-    if (!product) return;
-    // Optimistic: the preview has to move while the slider moves.
-    setProducts((ps) =>
-      ps.map((p) =>
-        p.id === product.id ? { ...p, printSpec: { ...p.printSpec, wrapDegrees } } : p,
-      ),
-    );
-    try {
-      await api.updateProduct(product.id, { wrapDegrees });
-    } catch (e) {
-      setStatus(`Could not save the wrap: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
 
   // Sample text survives edits, but colors and icons must NOT: they have to follow
   // the slot default. Keeping them made the admin show a stale value while the
@@ -320,63 +306,17 @@ export function App() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             onMove={(id, rect: Rect) => patch(id, (el) => ({ ...el, rect }))}
+            onRemove={remove}
           />
         </main>
 
         <aside className="props">
           {product ? (
-            <Preview
-              design={design}
-              values={values}
-              composer={composer}
-              photoUrl={api.productPhotoUrl(product.id)}
-            />
+            <MockupPreview api={api} product={product} design={design} values={values} />
           ) : (
             <p className="hint">
               No product imported yet. Go to Products, connect Printful and import one.
             </p>
-          )}
-          {product && (
-            <>
-              <p className="hint">
-                {product.printSpec.widthPx}&times;{product.printSpec.heightPx}px &middot;{" "}
-                {product.printSpec.dpi}dpi &middot; {product.source}
-              </p>
-
-              <div className="field">
-                <span className="eyebrow">
-                  Wrap{" "}
-                  {product.printSpec.wrapDegrees
-                    ? `${Math.round(product.printSpec.wrapDegrees)}°`
-                    : "— flat"}
-                </span>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={product.printSpec.wrapDegrees === null}
-                    onChange={(e) => setWrap(e.target.checked ? null : 360)}
-                  />
-                  Flat surface (tee, poster)
-                </label>
-                {product.printSpec.wrapDegrees !== null && (
-                  <>
-                    <input
-                      type="range"
-                      min={90}
-                      max={360}
-                      step={5}
-                      value={product.printSpec.wrapDegrees}
-                      onChange={(e) => setWrap(Number(e.target.value))}
-                    />
-                    <p className="hint">
-                      How much of the product the print file goes around. Printful gives
-                      the print width but not the diameter, so this starts as a guess:
-                      widen it until the design sits where it should.
-                    </p>
-                  </>
-                )}
-              </div>
-            </>
           )}
 
           {!selected && <p className="hint">Select an element to configure it.</p>}

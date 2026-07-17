@@ -16,8 +16,10 @@ import {
   authorizeUrl,
   call,
   catalogPath,
+  createMockupTask,
   defaultWrapDegrees,
   exchangeCode,
+  type MockupTask,
   type PrintFileStyle,
   type StoreRow,
 } from "./printful";
@@ -174,6 +176,11 @@ async function printfulRoutes(
     return json({ product, styles, variants }, {}, headers);
   }
 
+  if (path === "/api/printful/mockup" && req.method === "POST") {
+    const body = (await req.json()) as { productId: string; printFileUrl: string };
+    return await renderMockup(env, store, body, rq, headers);
+  }
+
   if (path === "/api/printful/import" && req.method === "POST") {
     const body = (await req.json()) as {
       productId: number;
@@ -185,6 +192,77 @@ async function printfulRoutes(
   }
 
   return json({ error: "printful route not found" }, { status: 404 }, headers);
+}
+
+/**
+ * Renders the design on the real product and waits for it.
+ *
+ * Polling happens here rather than in the browser: it keeps the Printful task id out
+ * of the client and turns an async job into one request. Measured at ~10s.
+ */
+async function renderMockup(
+  env: Env,
+  store: StoreRow,
+  body: { productId: string; printFileUrl: string },
+  rq: string,
+  headers: HeadersInit,
+): Promise<Response> {
+  const row = await env.DB.prepare(
+    "SELECT external_product_id, external_variant_id FROM products WHERE id = ?",
+  ).bind(body.productId).first<{ external_product_id: string | null; external_variant_id: string | null }>();
+  if (!row?.external_product_id) {
+    return json({ error: "That product did not come from Printful" }, { status: 400 }, headers);
+  }
+
+  const catalogId = Number(row.external_product_id);
+  const styles = await call<{ data?: PrintFileStyle[] }>(
+    env, store, `/v2/catalog-products/${catalogId}/mockup-styles?${rq}`,
+  );
+  const printFile = (styles.data ?? []).find((s) => s.placement === "default") ?? (styles.data ?? [])[0];
+  if (!printFile) {
+    return json({ error: "Printful gave no mockup styles" }, { status: 422 }, headers);
+  }
+  // The first style is the front view: the one worth looking at while designing.
+  const styleId = printFile.mockup_styles?.[0]?.id;
+  const variantId = Number(row.external_variant_id ?? 0);
+  if (!styleId || !variantId) {
+    return json({ error: "Missing a mockup style or variant" }, { status: 422 }, headers);
+  }
+
+  const task = await createMockupTask(env, store, {
+    format: "jpg",
+    products: [{
+      source: "catalog",
+      mockup_style_ids: [styleId],
+      catalog_product_id: catalogId,
+      catalog_variant_ids: [variantId],
+      placements: [{
+        placement: printFile.placement,
+        technique: printFile.technique,
+        layers: [{ type: "file", url: body.printFileUrl }],
+      }],
+    }],
+  });
+
+  const id = Array.isArray(task) ? task[0].id : task.id;
+  for (let i = 0; i < 25; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const res = await call<{ data?: MockupTask[] | MockupTask }>(
+      env, store, `/v2/mockup-tasks?id=${id}`,
+    );
+    const raw = res.data ?? res;
+    const t = (Array.isArray(raw) ? raw[0] : raw) as MockupTask;
+    if (t.status === "failed") {
+      return json({ error: t.failure_reasons?.join("; ") ?? "Printful failed" }, { status: 422 }, headers);
+    }
+    if (t.status === "completed") {
+      const urls = (t.catalog_variant_mockups ?? []).flatMap((v) =>
+        v.mockups.map((m) => m.mockup_url),
+      );
+      return json(urls, {}, headers);
+    }
+  }
+  return json({ error: "Printful took too long" }, { status: 504 }, headers);
 }
 
 function slugify(s: string): string {
@@ -390,6 +468,24 @@ export default {
         const updated = await env.DB.prepare("SELECT * FROM products WHERE id = ?")
           .bind(patch[1]).first<ProductRow>();
         return json(rowToProduct(updated!), {}, headers);
+      }
+
+      // Printful fetches the print file over HTTP, so it has to live somewhere public.
+      // On localhost it is not, and the mockup fails until the API is deployed.
+      const upload = path.match(/^\/api\/print-files\/([\w-]+)$/);
+      if (upload && req.method === "PUT") {
+        const key = `print-files/${upload[1]}.png`;
+        await env.BUCKET.put(key, await req.arrayBuffer(), {
+          httpMetadata: { contentType: "image/png" },
+        });
+        return json({ url: `${new URL(req.url).origin}/api/print-files/${upload[1]}` }, {}, headers);
+      }
+      if (upload && req.method === "GET") {
+        const obj = await env.BUCKET.get(`print-files/${upload[1]}.png`);
+        if (!obj) return json({ error: "not found" }, { status: 404 }, headers);
+        return new Response(obj.body, {
+          headers: { ...headers, "Content-Type": "image/png" },
+        });
       }
 
       if (path === "/api/products" && req.method === "GET") {

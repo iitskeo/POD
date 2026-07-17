@@ -204,6 +204,25 @@ export class ApiClient {
     return `${this.base}/api/products/${id}/photo`;
   }
 
+  /** Printful downloads the print file over HTTP, so it has to be hosted first. */
+  async uploadPrintFile(designId: string, png: Blob): Promise<{ url: string }> {
+    const res = await fetch(`${this.base}/api/print-files/${designId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "image/png" },
+      body: png,
+    });
+    if (!res.ok) throw new Error(`Could not upload the print file (${res.status})`);
+    return (await res.json()) as { url: string };
+  }
+
+  /** Renders the design on the real product. Takes ~10s: Printful is async. */
+  mockup(input: { productId: string; printFileUrl: string }) {
+    return this.req<string[]>("/api/printful/mockup", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
   /** Every variant, paging past Printful's 100 per page cap. */
   async allVariants(id: number, known?: number) {
     const first = await this.req<{ data: CatalogVariant[]; paging?: { total: number } }>(

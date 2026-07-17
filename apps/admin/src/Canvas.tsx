@@ -15,6 +15,7 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMove: (id: string, rect: Rect) => void;
+  onRemove: (id: string) => void;
 }
 
 type Drag =
@@ -23,7 +24,9 @@ type Drag =
 
 const EDITOR_SCALE = 0.25;
 
-export function Canvas({ design, values, composer, selectedId, onSelect, onMove }: Props) {
+export function Canvas({
+  design, values, composer, selectedId, onSelect, onMove, onRemove,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -41,6 +44,20 @@ export function Canvas({ design, values, composer, selectedId, onSelect, onMove 
     })();
     return () => { stale = true; };
   }, [design, values, composer]);
+
+  // Delete removes the selection, as in any editor.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? "");
+      if (typing || !selectedId) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        onRemove(selectedId);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId, onRemove]);
 
   /** screen px -> print file px. */
   const toFile = (dx: number, dy: number) => {
@@ -111,13 +128,27 @@ export function Canvas({ design, values, composer, selectedId, onSelect, onMove 
           >
             <span className="el-tag">{elementLabel(el)}</span>
             {el.id === selectedId && (
-              <span
-                className="el-handle"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  setDrag({ mode: "resize", id: el.id, startX: e.clientX, startY: e.clientY, orig: el.rect });
-                }}
-              />
+              <>
+                {/* Delete lived only in the Layers list, where nobody found it. */}
+                <button
+                  className="el-remove"
+                  title="Delete this element (or press Delete)"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(el.id);
+                  }}
+                >
+                  &times;
+                </button>
+                <span
+                  className="el-handle"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    setDrag({ mode: "resize", id: el.id, startX: e.clientX, startY: e.clientY, orig: el.rect });
+                  }}
+                />
+              </>
             )}
           </div>
         ))}
