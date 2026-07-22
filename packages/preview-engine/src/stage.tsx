@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { renderArtwork, type Resolver } from "./compose";
-import { elementLabel } from "./util";
+import { elementLabel, snapRect } from "./util";
 import type { Element, Placement, Rect, SlotValues } from "./types";
 
 const EDITOR_SCALE = 0.4;
@@ -84,7 +84,8 @@ export function PlacementStage({
       }
       const { dx, dy } = toFile(e.clientX - drag.sx, e.clientY - drag.sy);
       if (drag.mode === "move") {
-        onChange?.(drag.id, { ...drag.rect, x: Math.round(drag.rect.x + dx), y: Math.round(drag.rect.y + dy) }, drag.rot);
+        const moved = { ...drag.rect, x: Math.round(drag.rect.x + dx), y: Math.round(drag.rect.y + dy) };
+        onChange?.(drag.id, snapRect(moved, W, H, W * 0.02), drag.rot);
       } else {
         onChange?.(drag.id, {
           ...drag.rect,

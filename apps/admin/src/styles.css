@@ -85,3 +85,12 @@ input:focus, select:focus { border-color: var(--signal); }
 .sw { width: 26px; height: 26px; border-radius: 3px; border: 1px solid var(--line); cursor: pointer; outline: 2px solid transparent; outline-offset: 2px; }
 .sw[data-on="true"] { outline-color: var(--signal); }
 .product-props { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+
+.row-between { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+.mini.file { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 3px; }
+.quick-list { display: flex; flex-direction: column; gap: 4px; }
+.btn.sm { padding: 6px 8px; font-size: 11px; text-align: left; }
+.dupsel { width: 26px; padding: 2px; font-size: 10px; background: none; border: 0; color: var(--muted); cursor: pointer; }
+.align-bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: color-mix(in srgb, var(--bone) 3%, var(--carbon)); }
+.align-bar .eyebrow { margin: 0 6px 0 0; }
+input[type="color"] { padding: 2px; height: 32px; }

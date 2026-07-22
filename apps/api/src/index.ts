@@ -450,6 +450,22 @@ export default {
         return json({ id, name: String(form.get("name") ?? file.name), kind, aspect, recolorParts }, {}, headers);
       }
 
+      // Quick designs (admin): premade element combos
+      if (path === "/api/quick-designs" && req.method === "GET") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const { results } = await env.DB.prepare("SELECT * FROM quick_designs ORDER BY created_at DESC")
+          .all<{ id: string; name: string; thumb_key: string | null; elements: string }>();
+        return json(results.map((r) => ({ id: r.id, name: r.name, elements: JSON.parse(r.elements) })), {}, headers);
+      }
+      if (path === "/api/quick-designs" && req.method === "POST") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const body = (await req.json()) as { name: string; elements: unknown };
+        const id = crypto.randomUUID().slice(0, 12);
+        await env.DB.prepare("INSERT INTO quick_designs (id, name, thumb_key, elements, created_at) VALUES (?1,?2,NULL,?3,?4)")
+          .bind(id, body.name || "Quick design", JSON.stringify(body.elements ?? []), Date.now()).run();
+        return json({ id, name: body.name, elements: body.elements }, {}, headers);
+      }
+
       // Orders (public create; owner list)
       if (path === "/api/orders" && req.method === "POST") {
         return createOrder(env, await req.json(), headers);

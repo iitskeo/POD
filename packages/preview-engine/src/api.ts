@@ -68,6 +68,18 @@ export class ApiClient {
     if (!res.ok) throw new Error(`Upload failed (${res.status})`);
     return res.json();
   }
+  async createAsset(file: File, name: string, collection?: string): Promise<Asset> {
+    const form = new FormData();
+    form.append("file", file); form.append("name", name);
+    if (collection) form.append("collection", collection);
+    const res = await fetch(`${this.base}/api/assets`, { method: "POST", credentials: "include", body: form });
+    if (!res.ok) throw new Error(`Asset upload failed (${res.status})`);
+    return res.json();
+  }
+  listQuickDesigns() { return this.req<QuickDesign[]>("/api/quick-designs"); }
+  createQuickDesign(name: string, elements: Element[]) {
+    return this.req<QuickDesign>("/api/quick-designs", { method: "POST", body: JSON.stringify({ name, elements }) });
+  }
 
   // Mockup & print files
   async uploadPrintFile(key: string, png: Blob): Promise<{ url: string }> {
@@ -108,3 +120,5 @@ export interface StoredOrder {
   id: string; reference: string; status: string; email: string;
   subtotalCents: number; currency: string;
 }
+
+export interface QuickDesign { id: string; name: string; elements: Element[] }
