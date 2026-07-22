@@ -94,3 +94,13 @@ input:focus, select:focus { border-color: var(--signal); }
 .align-bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: color-mix(in srgb, var(--bone) 3%, var(--carbon)); }
 .align-bar .eyebrow { margin: 0 6px 0 0; }
 input[type="color"] { padding: 2px; height: 32px; }
+
+.choice-config { display: flex; flex-direction: column; gap: 8px; }
+.choice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.choice-tile { position: relative; aspect-ratio: 1; }
+.choice-tile .ct-img { width: 100%; height: 100%; background: color-mix(in srgb, var(--bone) 4%, var(--carbon)); border: 1px solid var(--line); border-radius: 3px; cursor: pointer; padding: 6px; }
+.choice-tile.on .ct-img { border-color: var(--signal); }
+.choice-tile.def .ct-img { outline: 2px solid var(--signal); outline-offset: 1px; }
+.choice-tile .ct-img img { width: 100%; height: 100%; object-fit: contain; filter: invert(1); opacity: 0.85; }
+.choice-tile .ct-tick { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--signal); color: var(--ink); font-size: 11px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.choice-tile:not(.on) .ct-tick { background: var(--carbon); border: 1px solid var(--line); color: var(--muted); }

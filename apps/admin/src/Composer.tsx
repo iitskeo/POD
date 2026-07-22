@@ -301,29 +301,69 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
       {el.outline && <div className="field row"><label><span className="hint">Outline color</span><input type="color" value={el.outline.color} onChange={(e) => onChange({ outline: { ...el.outline!, color: e.target.value } })} /></label><label><span className="hint">Width</span><input type="number" value={el.outline.width} onChange={(e) => onChange({ outline: { ...el.outline!, width: Number(e.target.value) } })} /></label></div>}
       <label className="check"><input type="checkbox" checked={!!el.shadow} onChange={(e) => onChange({ shadow: e.target.checked ? { color: "#00000066", blur: 8, dx: 3, dy: 3 } : undefined })} /> Shadow</label>
 
-      <span className="eyebrow" style={{ marginTop: 8 }}>Customer slots</span>
-      <label className="check"><input type="checkbox" checked={el.editable} onChange={(e) => onChange({ editable: e.target.checked, textLabel: el.textLabel ?? "Your text" })} /> Editable text</label>
+      <span className="eyebrow" style={{ marginTop: 8 }}>What the customer can change</span>
+      {!el.editable && !el.colorSlot && <p className="hint">Fixed — the customer can't change this text.</p>}
+      <label className="check"><input type="checkbox" checked={el.editable} onChange={(e) => onChange({ editable: e.target.checked, textLabel: el.textLabel ?? "Your text" })} /> Let the customer type their own text</label>
       {el.editable && <div className="field row"><label><span className="hint">Label</span><input value={el.textLabel ?? ""} onChange={(e) => onChange({ textLabel: e.target.value })} /></label><label><span className="hint">Max chars</span><input type="number" value={el.maxChars} onChange={(e) => onChange({ maxChars: Number(e.target.value) })} /></label></div>}
-      <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Text color", options: COLORS.slice(0, 4), default: el.color } : undefined })} /> Color choice</label>
+      <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Text color", options: COLORS.slice(0, 4), default: el.color } : undefined })} /> Let the customer pick the text color</label>
     </div>
   );
 }
 
 function GraphicProps({ el, parts, graphics, onChange }: { el: GraphicElement; parts: string[]; graphics: Graphic[]; onChange: (p: Partial<GraphicElement>) => void }) {
+  const options = el.choiceSlot?.options ?? [];
+  const toggleOption = (id: string) => {
+    const next = options.includes(id) ? options.filter((o) => o !== id) : [...options, id];
+    onChange({ choiceSlot: { label: el.choiceSlot?.label ?? "Choose image", options: next } });
+  };
+  const fixed = !el.choiceSlot && !el.colorSlot;
   return (
     <div className="pgroup">
-      <span className="eyebrow" style={{ marginTop: 4 }}>Customer slots</span>
-      <label className="check"><input type="checkbox" checked={!!el.choiceSlot} onChange={(e) => onChange({ choiceSlot: e.target.checked ? { label: "Graphic", options: graphics.filter((g) => g.id.startsWith("seed:")).map((g) => g.id) } : undefined })} /> Graphic choice</label>
-      {el.choiceSlot && <p className="hint">Offering {el.choiceSlot.options.length} graphics.</p>}
+      <span className="eyebrow" style={{ marginTop: 4 }}>What the customer can change</span>
+      {fixed && <p className="hint">Fixed — the customer can't change this graphic.</p>}
+
+      <label className="check">
+        <input type="checkbox" checked={!!el.choiceSlot}
+          onChange={(e) => onChange({ choiceSlot: e.target.checked ? { label: "Choose image", options: [el.assetId] } : undefined })} />
+        Let the customer pick the image
+      </label>
+      {el.choiceSlot && (
+        <div className="choice-config">
+          <label className="field"><span className="hint">Label shown to customer</span>
+            <input value={el.choiceSlot.label} onChange={(e) => onChange({ choiceSlot: { ...el.choiceSlot!, label: e.target.value } })} /></label>
+          <span className="hint">Tick the images to offer · click a tick's tile to set the default</span>
+          <div className="choice-grid">
+            {graphics.map((g) => {
+              const on = options.includes(g.id);
+              return (
+                <div key={g.id} className={`choice-tile${on ? " on" : ""}${el.assetId === g.id ? " def" : ""}`}>
+                  <button className="ct-img" title={on ? "Set as default" : "Offer this"} onClick={() => (on ? onChange({ assetId: g.id }) : toggleOption(g.id))}>
+                    <img src={g.thumb} alt={g.name} />
+                  </button>
+                  <button className="ct-tick" onClick={() => toggleOption(g.id)}>{on ? "✓" : "+"}</button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="hint">Offering {options.length} · default {graphics.find((g) => g.id === el.assetId)?.name ?? "—"}</p>
+        </div>
+      )}
+
       {parts.length > 0 && (
-        <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Color", part: parts[0], options: COLORS.slice(0, 4), default: "#0A0A0A" } : undefined })} /> Color choice ({parts[0]})</label>
+        <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Color", part: parts[0], options: COLORS.slice(0, 4), default: "#0A0A0A" } : undefined })} /> Let the customer pick the color ({parts[0]})</label>
       )}
     </div>
   );
 }
 
 function ImageProps({ onPattern }: { onPattern: () => void }) {
-  return <div className="pgroup"><p className="hint">Uploaded image (owner-only, fixed).</p><button className="btn wide" onClick={onPattern}>Make seamless pattern</button></div>;
+  return (
+    <div className="pgroup">
+      <span className="eyebrow" style={{ marginTop: 4 }}>What the customer can change</span>
+      <p className="hint">Fixed — an uploaded image is always locked. To let customers choose between several images, upload them under Graphics (the + button) and add a Graphic with "Let the customer pick the image".</p>
+      <button className="btn wide" onClick={onPattern}>Make seamless pattern</button>
+    </div>
+  );
 }
 
 function PatternProps({ el, onChange }: { el: PatternElement; onChange: (p: Partial<PatternElement>) => void }) {

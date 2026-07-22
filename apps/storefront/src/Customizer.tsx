@@ -7,7 +7,12 @@ import { api } from "./api";
 import { cart } from "./cartStore";
 import { navigate } from "./App";
 
-const seedThumb = (id: string) => { const a = SEED_ASSETS.find((s) => s.id === id); return a ? svgDataUrl(a.svg) : ""; };
+// A thumbnail for any graphic option: bundled starters are inline SVG, owner assets
+// are served from the API.
+const graphicThumb = (id: string) => {
+  const seed = SEED_ASSETS.find((s) => s.id === id);
+  return seed ? svgDataUrl(seed.svg) : api.assetFileUrl(id);
+};
 
 export function Customizer({ slug }: { slug: string }) {
   const resolver = useMemo(() => makeResolver(api), []);
@@ -130,7 +135,7 @@ export function Customizer({ slug }: { slug: string }) {
               <div className="swatches">{s.options.map((c) => <button key={c} className="sw" style={{ background: c }} data-on={(values[`${s.elementId}.color`] ?? s.default) === c} onClick={() => setValues((v) => ({ ...v, [`${s.elementId}.color`]: c }))} />)}</div>
             )}
             {s.kind === "graphic" && (
-              <div className="tiles">{s.options.map((g) => <button key={g} className="tile" data-on={(values[`${s.elementId}.graphic`] ?? s.default) === g} onClick={() => setValues((v) => ({ ...v, [`${s.elementId}.graphic`]: g }))}><img src={seedThumb(g)} alt="" /></button>)}</div>
+              <div className="tiles">{s.options.map((g) => <button key={g} className="tile" data-on={(values[`${s.elementId}.graphic`] ?? s.default) === g} onClick={() => setValues((v) => ({ ...v, [`${s.elementId}.graphic`]: g }))}><img src={graphicThumb(g)} alt="" /></button>)}</div>
             )}
           </div>
         ))}
