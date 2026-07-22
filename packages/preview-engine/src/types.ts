@@ -62,8 +62,11 @@ export interface GraphicElement extends ElementBase {
 
 export interface ImageElement extends ElementBase {
   kind: "image";
-  storageKey: string;
+  storageKey: string;              // default upload id
   aspect: number;
+  // Image-choice slot: the customer picks among uploaded images (upload ids),
+  // without the owner routing them through the graphics library.
+  choiceSlot?: { label: string; options: string[] };
 }
 
 export interface PatternElement extends ElementBase {

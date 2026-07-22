@@ -1,4 +1,4 @@
-import { resolveGraphic, resolveText } from "./slots";
+import { resolveGraphic, resolveImage, resolveText } from "./slots";
 import type { Element, Placement, SlotValues, TextElement } from "./types";
 
 /**
@@ -148,7 +148,7 @@ export async function renderArtwork(
         if (img) ctx.drawImage(img, 0, 0, W, H);
       }
     } else if (el.kind === "image") {
-      const img = await resolver.image(el.storageKey);
+      const img = await resolver.image(resolveImage(el, values));
       if (img) ctx.drawImage(img, r.x, r.y, r.w, r.h);
     } else if (el.kind === "graphic") {
       const { assetId, color } = resolveGraphic(el, values);

@@ -137,6 +137,9 @@ export function Customizer({ slug }: { slug: string }) {
             {s.kind === "graphic" && (
               <div className="tiles">{s.options.map((g) => <button key={g} className="tile" data-on={(values[`${s.elementId}.graphic`] ?? s.default) === g} onClick={() => setValues((v) => ({ ...v, [`${s.elementId}.graphic`]: g }))}><img src={graphicThumb(g)} alt="" /></button>)}</div>
             )}
+            {s.kind === "image" && (
+              <div className="tiles">{s.options.map((id) => <button key={id} className="tile photo" data-on={(values[`${s.elementId}.image`] ?? s.default) === id} onClick={() => setValues((v) => ({ ...v, [`${s.elementId}.image`]: id }))}><img src={api.uploadUrl(id)} alt="" /></button>)}</div>
+            )}
           </div>
         ))}
 

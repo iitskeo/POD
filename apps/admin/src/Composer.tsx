@@ -263,11 +263,13 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
           {!selected && <p className="hint">Select an element, or set the price below.</p>}
           {selected?.kind === "text" && <TextProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "graphic" && <GraphicProps el={selected} parts={graphicById(selected.assetId)?.recolorParts ?? []} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
-          {selected?.kind === "image" && <ImageProps onPattern={() => {
-            const el = selected as ImageElement;
-            const pat: PatternElement = { id: el.id, kind: "pattern", placement: el.placement, rect: { x: 0, y: 0, w: placement.printSpec.widthPx, h: placement.printSpec.heightPx }, z: el.z, source: { storageKey: el.storageKey }, type: "half_drop", scale: 1, spacing: 20 };
-            update(el.id, pat as unknown as Partial<Element>);
-          }} />}
+          {selected?.kind === "image" && <ImageProps el={selected} onChange={(p) => update(selected.id, p)}
+            addOption={async (file) => { try { const { uploadId } = await api.upload(file); return uploadId; } catch { return null; } }}
+            onPattern={() => {
+              const el = selected as ImageElement;
+              const pat: PatternElement = { id: el.id, kind: "pattern", placement: el.placement, rect: { x: 0, y: 0, w: placement.printSpec.widthPx, h: placement.printSpec.heightPx }, z: el.z, source: { storageKey: el.storageKey }, type: "half_drop", scale: 1, spacing: 20 };
+              update(el.id, pat as unknown as Partial<Element>);
+            }} />}
           {selected?.kind === "pattern" && <PatternProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "background" && <BackgroundProps el={selected} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
 
@@ -306,6 +308,7 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
       <label className="check"><input type="checkbox" checked={el.editable} onChange={(e) => onChange({ editable: e.target.checked, textLabel: el.textLabel ?? "Your text" })} /> Let the customer type their own text</label>
       {el.editable && <div className="field row"><label><span className="hint">Label</span><input value={el.textLabel ?? ""} onChange={(e) => onChange({ textLabel: e.target.value })} /></label><label><span className="hint">Max chars</span><input type="number" value={el.maxChars} onChange={(e) => onChange({ maxChars: Number(e.target.value) })} /></label></div>}
       <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Text color", options: COLORS.slice(0, 4), default: el.color } : undefined })} /> Let the customer pick the text color</label>
+      {el.colorSlot && <ColorSlotCfg options={el.colorSlot.options} def={el.colorSlot.default} onChange={(options, def) => onChange({ colorSlot: { ...el.colorSlot!, options, default: def } })} />}
     </div>
   );
 }
@@ -350,18 +353,53 @@ function GraphicProps({ el, parts, graphics, onChange }: { el: GraphicElement; p
       )}
 
       {parts.length > 0 && (
-        <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Color", part: parts[0], options: COLORS.slice(0, 4), default: "#0A0A0A" } : undefined })} /> Let the customer pick the color ({parts[0]})</label>
+        <>
+          <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Color", part: parts[0], options: COLORS.slice(0, 4), default: "#0A0A0A" } : undefined })} /> Let the customer pick the color ({parts[0]})</label>
+          {el.colorSlot && <ColorSlotCfg options={el.colorSlot.options} def={el.colorSlot.default} onChange={(options, def) => onChange({ colorSlot: { ...el.colorSlot!, options, default: def } })} />}
+        </>
       )}
     </div>
   );
 }
 
-function ImageProps({ onPattern }: { onPattern: () => void }) {
+function ImageProps({ el, onChange, addOption, onPattern }: {
+  el: ImageElement; onChange: (p: Partial<ImageElement>) => void;
+  addOption: (file: File) => Promise<string | null>; onPattern: () => void;
+}) {
+  const opts = el.choiceSlot?.options ?? [el.storageKey];
+  const thumb = (id: string) => api.uploadUrl(id);
+  const onFiles = async (files: FileList) => {
+    const ids: string[] = [];
+    for (const f of Array.from(files)) { const id = await addOption(f); if (id) ids.push(id); }
+    if (ids.length) onChange({ choiceSlot: { label: el.choiceSlot?.label ?? "Choose image", options: [...new Set([...opts, ...ids])] } });
+  };
+  const fixed = !el.choiceSlot;
   return (
     <div className="pgroup">
       <span className="eyebrow" style={{ marginTop: 4 }}>What the customer can change</span>
-      <p className="hint">Fixed — an uploaded image is always locked. To let customers choose between several images, upload them under Graphics (the + button) and add a Graphic with "Let the customer pick the image".</p>
-      <button className="btn wide" onClick={onPattern}>Make seamless pattern</button>
+      {fixed && <p className="hint">Fixed — the customer can't change this image.</p>}
+      <label className="check">
+        <input type="checkbox" checked={!!el.choiceSlot}
+          onChange={(e) => onChange({ choiceSlot: e.target.checked ? { label: "Choose image", options: [el.storageKey] } : undefined })} />
+        Let the customer pick the image
+      </label>
+      {el.choiceSlot && (
+        <div className="choice-config">
+          <label className="field"><span className="hint">Label shown to customer</span>
+            <input value={el.choiceSlot.label} onChange={(e) => onChange({ choiceSlot: { ...el.choiceSlot!, label: e.target.value } })} /></label>
+          <div className="choice-grid">
+            {opts.map((id) => (
+              <div key={id} className={`choice-tile on${el.storageKey === id ? " def" : ""}`}>
+                <button className="ct-img" title="Set as default" onClick={() => onChange({ storageKey: id })}><img src={thumb(id)} alt="" style={{ filter: "none" }} /></button>
+                {opts.length > 1 && <button className="ct-tick" title="Remove" onClick={() => { const next = opts.filter((o) => o !== id); onChange({ choiceSlot: { ...el.choiceSlot!, options: next }, storageKey: el.storageKey === id ? next[0] : el.storageKey }); }}>×</button>}
+              </div>
+            ))}
+          </div>
+          <label className="btn wide file sm">+ Add image options<input type="file" accept="image/png,image/jpeg,image/svg+xml" multiple hidden onChange={(e) => e.target.files && onFiles(e.target.files)} /></label>
+          <p className="hint">Offering {opts.length} · default ringed</p>
+        </div>
+      )}
+      <button className="btn wide" style={{ marginTop: 8 }} onClick={onPattern}>Make seamless pattern</button>
     </div>
   );
 }
@@ -379,6 +417,26 @@ function BackgroundProps({ el, onChange }: { el: BackgroundElement; graphics: Gr
   return (
     <div className="pgroup">
       <div className="field"><span className="hint">Fill color</span><div className="swatches">{COLORS.map((c) => <button key={c} className="sw" data-on={el.fill.color === c} style={{ background: c }} onClick={() => onChange({ fill: { color: c } })} />)}</div></div>
+    </div>
+  );
+}
+
+/** Curate which colors a color-choice slot offers, and the default. */
+function ColorSlotCfg({ options, def, onChange }: { options: string[]; def: string; onChange: (options: string[], def: string) => void }) {
+  const toggle = (c: string) => {
+    const next = options.includes(c) ? options.filter((x) => x !== c) : [...options, c];
+    onChange(next, next.includes(def) ? def : next[0] ?? c);
+  };
+  return (
+    <div className="field">
+      <span className="hint">Colors to offer · click a ticked one to set default</span>
+      <div className="swatches">
+        {COLORS.map((c) => {
+          const on = options.includes(c);
+          return <button key={c} className="sw" data-on={on} data-def={def === c} style={{ background: c, opacity: on ? 1 : 0.35 }} title={on ? "Set as default / remove" : "Offer this color"} onClick={() => (on ? onChange(options, c) : toggle(c))} onDoubleClick={() => toggle(c)} />;
+        })}
+      </div>
+      <p className="hint">{options.length} offered · default shown ringed. Click an unticked color to add; click a ticked one to set default; double-click to remove.</p>
     </div>
   );
 }
