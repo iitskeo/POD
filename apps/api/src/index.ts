@@ -249,6 +249,90 @@ async function renderMockup(
   return json({ error: "Printful took too long" }, { status: 504 }, headers);
 }
 
+// ---- Helpers -------------------------------------------------------------------
+
+interface UploadFile { name: string; type: string; arrayBuffer(): Promise<ArrayBuffer> }
+/** Narrow a FormData entry to an uploaded file without relying on the File global. */
+function asUpload(entry: unknown): UploadFile | null {
+  if (!entry || typeof entry === "string") return null;
+  const f = entry as UploadFile;
+  return typeof f.arrayBuffer === "function" ? f : null;
+}
+
+/** Aspect (w/h) of an image from its bytes, no DOM. Handles PNG, JPEG, SVG. */
+async function imageAspect(buf: ArrayBuffer, type: string): Promise<number> {
+  const b = new Uint8Array(buf);
+  if (type.includes("svg") || (b[0] === 0x3c)) {
+    const text = new TextDecoder().decode(b.slice(0, 2000));
+    const vb = text.match(/viewBox="[\d.\s]*?([\d.]+)[\s,]+([\d.]+)"/);
+    if (vb) return Number(vb[1]) / Number(vb[2]);
+    const w = text.match(/width="([\d.]+)/), h = text.match(/height="([\d.]+)/);
+    if (w && h) return Number(w[1]) / Number(h[1]);
+    return 1;
+  }
+  // PNG: IHDR width/height at bytes 16..24, big-endian.
+  if (b[0] === 0x89 && b[1] === 0x50) {
+    const dv = new DataView(buf);
+    return dv.getUint32(16) / dv.getUint32(20);
+  }
+  // JPEG: scan SOF markers for dimensions.
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const marker = b[i + 1];
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        const h = (b[i + 5] << 8) | b[i + 6];
+        const w = (b[i + 7] << 8) | b[i + 8];
+        return w / h;
+      }
+      i += 2 + ((b[i + 2] << 8) | b[i + 3]);
+    }
+  }
+  return 1;
+}
+
+interface OrderItemIn {
+  productId: string; designId: string; variantId: string; variantLabel: string;
+  slotValues: Record<string, string>; qty: number;
+}
+
+async function createOrder(env: Env, body: {
+  email: string; notify?: boolean; shipping: unknown; items: OrderItemIn[];
+}, headers: HeadersInit): Promise<Response> {
+  if (!body.email || !body.items?.length) {
+    return json({ error: "email and at least one item are required" }, { status: 400 }, headers);
+  }
+  const now = Date.now();
+  const orderId = crypto.randomUUID();
+  const reference = `ABB-${orderId.slice(0, 5).toUpperCase()}`;
+
+  let subtotal = 0;
+  const items: Array<[string, number]> = [];
+  for (const it of body.items) {
+    const p = await env.DB.prepare("SELECT retail_price_cents FROM products WHERE id = ?")
+      .bind(it.productId).first<{ retail_price_cents: number }>();
+    const unit = p?.retail_price_cents ?? 0;
+    subtotal += unit * (it.qty || 1);
+    items.push([it.productId, unit]);
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO orders (id, reference, status, email, notify, shipping, subtotal_cents, currency, created_at, updated_at)
+     VALUES (?1,?2,'draft',?3,?4,?5,?6,'USD',?7,?7)`,
+  ).bind(orderId, reference, body.email, body.notify === false ? 0 : 1, JSON.stringify(body.shipping), subtotal, now).run();
+
+  for (let i = 0; i < body.items.length; i++) {
+    const it = body.items[i];
+    await env.DB.prepare(
+      `INSERT INTO order_items (id, order_id, product_id, design_id, variant_id, variant_label, slot_values, qty, unit_price_cents, created_at)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)`,
+    ).bind(crypto.randomUUID(), orderId, it.productId, it.designId, it.variantId, it.variantLabel, JSON.stringify(it.slotValues ?? {}), it.qty || 1, items[i][1], now).run();
+  }
+
+  return json({ id: orderId, reference, status: "draft" }, {}, headers);
+}
+
 // ---- Router --------------------------------------------------------------------
 
 export default {
@@ -319,6 +403,63 @@ export default {
         const obj = await env.BUCKET.get(row.storage_key);
         if (!obj) return json({ error: "not found" }, { status: 404 }, headers);
         return new Response(obj.body, { headers: { ...headers, "Content-Type": obj.httpMetadata?.contentType ?? "image/svg+xml" } });
+      }
+
+      // Uploads (admin): authoring artwork into R2.
+      if (path === "/api/uploads" && req.method === "POST") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const form = await req.formData();
+        const file = asUpload(form.get("file"));
+        if (!file) return json({ error: "file required" }, { status: 400 }, headers);
+        const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
+        const uploadId = `${crypto.randomUUID().slice(0, 12)}.${ext}`;
+        const buf = await file.arrayBuffer();
+        await env.BUCKET.put(`uploads/${uploadId}`, buf, { httpMetadata: { contentType: file.type || "image/png" } });
+        const aspect = await imageAspect(buf, file.type).catch(() => 1);
+        return json({ uploadId, url: `${url.origin}/api/uploads/${uploadId}`, aspect }, {}, headers);
+      }
+
+      // Assets library (admin manage; public read handled above)
+      if (path === "/api/assets" && req.method === "GET") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const col = url.searchParams.get("collection");
+        const q = col
+          ? env.DB.prepare("SELECT * FROM assets WHERE collection = ? ORDER BY created_at DESC").bind(col)
+          : env.DB.prepare("SELECT * FROM assets ORDER BY created_at DESC");
+        const { results } = await q.all<{ id: string; name: string; collection: string | null; kind: string; aspect: number; recolor_parts: string | null }>();
+        return json(results.map((a) => ({ id: a.id, name: a.name, collection: a.collection, kind: a.kind, aspect: a.aspect, recolorParts: a.recolor_parts ? JSON.parse(a.recolor_parts) : [] })), {}, headers);
+      }
+      if (path === "/api/assets" && req.method === "POST") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const form = await req.formData();
+        const file = asUpload(form.get("file"));
+        if (!file) return json({ error: "file required" }, { status: 400 }, headers);
+        const kind = file.name.endsWith(".svg") ? "svg" : "png";
+        const id = crypto.randomUUID().slice(0, 12);
+        const key = `assets/${id}.${kind}`;
+        const buf = await file.arrayBuffer();
+        await env.BUCKET.put(key, buf, { httpMetadata: { contentType: kind === "svg" ? "image/svg+xml" : "image/png" } });
+        const recolorParts = kind === "svg"
+          ? [...new Set([...new TextDecoder().decode(buf).matchAll(/data-recolor="([^"]+)"/g)].map((m) => m[1]))]
+          : [];
+        const aspect = await imageAspect(buf, file.type).catch(() => 1);
+        const now = Date.now();
+        await env.DB.prepare(
+          "INSERT INTO assets (id, name, collection, storage_key, kind, aspect, recolor_parts, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        ).bind(id, String(form.get("name") ?? file.name), (form.get("collection") as string) ?? null, key, kind, aspect, JSON.stringify(recolorParts), now).run();
+        return json({ id, name: String(form.get("name") ?? file.name), kind, aspect, recolorParts }, {}, headers);
+      }
+
+      // Orders (public create; owner list)
+      if (path === "/api/orders" && req.method === "POST") {
+        return createOrder(env, await req.json(), headers);
+      }
+      const orderRef = path.match(/^\/api\/orders\/([\w-]+)$/);
+      if (orderRef && req.method === "GET") {
+        const row = await env.DB.prepare("SELECT * FROM orders WHERE reference = ?").bind(orderRef[1])
+          .first<{ id: string; reference: string; status: string; email: string; subtotal_cents: number; currency: string }>();
+        if (!row) return json({ error: "not found" }, { status: 404 }, headers);
+        return json({ id: row.id, reference: row.reference, status: row.status, email: row.email, subtotalCents: row.subtotal_cents, currency: row.currency }, {}, headers);
       }
 
       // Mockup (public, rate-limited in spirit)
