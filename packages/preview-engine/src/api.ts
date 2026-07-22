@@ -1,268 +1,16 @@
-import type { DesignElement } from "./design";
-import type { PrintSpec } from "./types";
+import type { Asset, Design, Element, Product } from "./types";
 
-/** A design as it lives in D1. `spec` and `safeAngleDeg` come from the product. */
-export interface StoredDesign {
-  id: string;
-  productId: string;
-  name: string;
-  slug: string;
-  priceCents: number;
-  status: "draft" | "published";
-  baseImageKey: string | null;
-  elements: DesignElement[];
-}
+export interface ImportResult { productId: string; designId: string }
 
-export interface PrintfulStatus {
-  connected: boolean;
-  storeName: string | null;
-  storeId: string | null;
-}
-
-export interface CatalogProduct {
-  id: number;
-  type: string;
-  main_category_id: number;
-  name: string;
-  brand: string | null;
-  model: string | null;
-  image: string;
-  variant_count: number;
-  is_discontinued: boolean;
-  description: string;
-  techniques?: Array<{ key: string; display_name: string }>;
-}
-
-export interface CatalogPage {
-  data: CatalogProduct[];
-  paging?: { total: number; offset: number; limit: number };
-}
-
-export interface Category {
-  id: number;
-  parent_id: number | null;
-  title: string;
-}
-
-/** Printable area of a variant, in inches. */
-export interface PlacementDimension {
-  placement: string;
-  width: number;
-  height: number;
-  orientation: string;
-}
-
-export interface CatalogVariant {
-  id: number;
-  name: string;
-  size: string | null;
-  color: string | null;
-  color_code: string | null;
-  image: string;
-  placement_dimensions?: PlacementDimension[];
-}
-
-export interface MockupStyle {
-  placement: string;
-  display_name: string;
-  technique: string;
-  print_area_width: number;
-  print_area_height: number;
-  dpi: number;
-  mockup_styles?: Array<{ id: number; view_name: string; category_name: string }>;
-}
-
-export interface CatalogDetail {
-  product: { data?: CatalogProduct } | CatalogProduct;
-  styles: { data?: MockupStyle[] } | { error: string };
-  variants: { data?: CatalogVariant[]; paging?: { total: number } } | { error: string };
-}
-
-/** Price does not ship with the product: it lives per variant and per technique. */
-export interface ProductPrices {
-  currency: string;
-  variants: Array<{
-    id: number;
-    techniques: Array<{ technique_key: string; price: string; discounted_price: string }>;
-  }>;
-  discount_tiers?: Array<{ quantity: number; bulk_discount_percentage: number }>;
-}
-
-/** Minimum price across variants: the card's "from $X". */
-export function minPrice(p: ProductPrices): number | null {
-  const all = p.variants.flatMap((v) => v.techniques.map((t) => Number(t.price)));
-  const ok = all.filter((n) => Number.isFinite(n) && n > 0);
-  return ok.length ? Math.min(...ok) : null;
-}
-
-/** One placement's flat template: product photo plus the print-area rectangle on it. */
-export interface PlacementTemplate {
-  placement: string;
-  imageUrl: string;
-  backgroundColor: string | null;
-  templateWidth: number;
-  templateHeight: number;
-  printArea: { top: number; left: number; width: number; height: number };
-}
-
-export interface ProductTemplate {
-  variantId: number;
-  placements: PlacementTemplate[];
-}
-
-/** A product as it lives in D1, after import. */
-export interface StoredProduct {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  source: string;
-  externalProductId: string | null;
-  externalVariantId: string | null;
-  surface: "revolution" | "flat";
-  hasPhoto: boolean;
-  printBand: { yStart: number; height: number } | null;
-  calibration: { shadingStrength: number; safeAngleDeg: number } | null;
-  printSpec: PrintSpec;
-  /** Printful's flat template for the live editor. Null for the seeded product. */
-  template: ProductTemplate | null;
-}
-
-export interface ImportedProduct {
-  id: string;
-  name: string;
-  photoKey: string;
-  printSpec: PrintSpec;
-  surface: string;
-  technique: string;
-}
-
+/** Typed client for the API Worker (docs/pod/05 section 5). Sends the admin cookie. */
 export class ApiClient {
   constructor(private base: string) {}
 
-  /** URL to send the admin to in order to start OAuth. */
-  connectUrl() {
-    return `${this.base}/api/printful/connect`;
-  }
-
-  printfulStatus() {
-    return this.req<PrintfulStatus>("/api/printful/status");
-  }
-
-  catalog(offset = 0, limit = 20) {
-    return this.req<CatalogPage>(`/api/printful/catalog?offset=${offset}&limit=${limit}`);
-  }
-
-  categories() {
-    return this.req<{ data: Category[] }>("/api/printful/categories");
-  }
-
-  /**
-   * Fetches the whole catalog.
-   *
-   * The v2 API has no name search, only category/color/technique filters. At ~500
-   * products it is cheaper to pull them all once and filter in the browser than to
-   * hit Printful on every keystroke.
-   */
-  async fullCatalog(onProgress?: (loaded: number, total: number) => void) {
-    const first = await this.catalog(0, 100);
-    const total = first.paging?.total ?? first.data.length;
-    onProgress?.(first.data.length, total);
-
-    const rest = await Promise.all(
-      Array.from({ length: Math.ceil((total - 100) / 100) }, (_, i) =>
-        this.catalog((i + 1) * 100, 100),
-      ),
-    );
-    const all = [...first.data, ...rest.flatMap((p) => p.data)];
-    onProgress?.(all.length, total);
-    return all;
-  }
-
-  catalogProduct(id: number) {
-    return this.req<CatalogDetail>(`/api/printful/catalog/${id}`);
-  }
-
-  productPrices(id: number) {
-    return this.req<{ data: ProductPrices }>(`/api/printful/catalog/${id}/prices`);
-  }
-
-  /**
-   * Imports a catalog product.
-   *
-   * `photoUrl` is chosen by the admin: the engine needs the product front-on against
-   * a flat background, and the catalog mixes in angles, props and lifestyle shots.
-   */
-  importProduct(input: { productId: number; variantId?: number; photoUrl: string; name?: string }) {
-    return this.req<ImportedProduct>("/api/printful/import", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  }
-
-  listProducts() {
-    return this.req<StoredProduct[]>("/api/products");
-  }
-
-  /**
-   * Corrects a product's calibration.
-   *
-   * The wrap is not derivable from Printful's data, so it is imported as a guess and
-   * fixed here against the preview.
-   */
-  updateProduct(id: string, patch: { wrapDegrees?: number | null; safeAngleDeg?: number }) {
-    return this.req<StoredProduct>(`/api/products/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    });
-  }
-
-  productPhotoUrl(id: string) {
-    return `${this.base}/api/products/${id}/photo`;
-  }
-
-  /** Printful downloads the print file over HTTP, so it has to be hosted first. */
-  async uploadPrintFile(designId: string, png: Blob): Promise<{ url: string }> {
-    const res = await fetch(`${this.base}/api/print-files/${designId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "image/png" },
-      body: png,
-    });
-    if (!res.ok) throw new Error(`Could not upload the print file (${res.status})`);
-    return (await res.json()) as { url: string };
-  }
-
-  /** Renders the design on the real product. Takes ~10s: Printful is async. */
-  mockup(input: { productId: string; printFileUrl: string }) {
-    return this.req<string[]>("/api/printful/mockup", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  }
-
-  /** Every variant, paging past Printful's 100 per page cap. */
-  async allVariants(id: number, known?: number) {
-    const first = await this.req<{ data: CatalogVariant[]; paging?: { total: number } }>(
-      `/api/printful/catalog/${id}/variants?offset=0`,
-    );
-    const total = first.paging?.total ?? known ?? first.data.length;
-    if (total <= first.data.length) return first.data;
-
-    const rest = await Promise.all(
-      Array.from({ length: Math.ceil((total - 100) / 100) }, (_, i) =>
-        this.req<{ data: CatalogVariant[] }>(
-          `/api/printful/catalog/${id}/variants?offset=${(i + 1) * 100}`,
-        ),
-      ),
-    );
-    return [...first.data, ...rest.flatMap((r) => r.data)];
-  }
-
   private async req<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${this.base}${path}`, {
+      credentials: "include",
       ...init,
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-      cache: "no-store",
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: res.statusText }));
@@ -271,23 +19,92 @@ export class ApiClient {
     return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
   }
 
-  listDesigns(status?: string) {
-    const q = status ? `?status=${encodeURIComponent(status)}` : "";
-    return this.req<StoredDesign[]>(`/api/designs${q}`);
+  // Admin auth
+  login(passphrase: string) {
+    return this.req<void>("/api/admin/login", { method: "POST", body: JSON.stringify({ passphrase }) });
+  }
+  logout() { return this.req<void>("/api/admin/logout", { method: "POST" }); }
+  authed() { return this.req<{ authenticated: boolean }>("/api/admin/session").then((r) => r.authenticated); }
+
+  // Printful
+  connectUrl() { return `${this.base}/api/printful/connect`; }
+  printfulStatus() { return this.req<{ connected: boolean; storeName: string | null }>("/api/printful/status"); }
+  catalog(offset = 0, limit = 100) { return this.req<CatalogPage>(`/api/printful/catalog?offset=${offset}&limit=${limit}`); }
+  catalogPrices(id: number) { return this.req<{ data: ProductPrices }>(`/api/printful/catalog/${id}/prices`); }
+  import(productId: number) { return this.req<ImportResult>("/api/printful/import", { method: "POST", body: JSON.stringify({ productId }) }); }
+
+  async fullCatalog(onProgress?: (n: number, total: number) => void): Promise<CatalogProduct[]> {
+    const first = await this.catalog(0, 100);
+    const total = first.paging?.total ?? first.data.length;
+    onProgress?.(first.data.length, total);
+    const rest = await Promise.all(
+      Array.from({ length: Math.max(0, Math.ceil((total - 100) / 100)) }, (_, i) => this.catalog((i + 1) * 100, 100)),
+    );
+    const all = [...first.data, ...rest.flatMap((p) => p.data)];
+    onProgress?.(all.length, total);
+    return all;
   }
 
-  getDesign(id: string) {
-    return this.req<StoredDesign>(`/api/designs/${id}`);
+  // Products & designs
+  listProducts() { return this.req<Product[]>("/api/products"); }
+  product(id: string) { return this.req<Product>(`/api/products/${id}`); }
+  productBySlug(slug: string) { return this.req<Product>(`/api/products/slug/${slug}`); }
+  patchProduct(id: string, patch: { name?: string; retailPriceCents?: number; status?: string }) {
+    return this.req<Product>(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+  designForProduct(productId: string) { return this.req<Design>(`/api/designs/product/${productId}`); }
+  saveDesign(d: { id: string; productId: string; name: string; status: string; elements: Element[] }) {
+    return this.req<Design>(`/api/designs/${d.id}`, { method: "PUT", body: JSON.stringify(d) });
   }
 
-  saveDesign(d: StoredDesign) {
-    return this.req<StoredDesign>(`/api/designs/${d.id}`, {
-      method: "PUT",
-      body: JSON.stringify(d),
+  // Assets, uploads, quick designs
+  listAssets(collection?: string) { return this.req<Asset[]>(`/api/assets${collection ? `?collection=${collection}` : ""}`); }
+  assetFileUrl(id: string) { return `${this.base}/api/assets/${id}/file`; }
+  uploadUrl(id: string) { return `${this.base}/api/uploads/${id}`; }
+  async upload(file: File): Promise<{ uploadId: string; url: string; aspect: number }> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${this.base}/api/uploads`, { method: "POST", credentials: "include", body: form });
+    if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+    return res.json();
+  }
+
+  // Mockup & print files
+  async uploadPrintFile(key: string, png: Blob): Promise<{ url: string }> {
+    const res = await fetch(`${this.base}/api/print-files/${key}`, {
+      method: "PUT", credentials: "include", headers: { "Content-Type": "image/png" }, body: png,
     });
+    if (!res.ok) throw new Error(`Print file upload failed (${res.status})`);
+    return res.json();
+  }
+  mockup(productId: string, files: Array<{ placement: string; printFileUrl: string }>) {
+    return this.req<string[]>("/api/mockup", { method: "POST", body: JSON.stringify({ productId, files }) });
   }
 
-  deleteDesign(id: string) {
-    return this.req<void>(`/api/designs/${id}`, { method: "DELETE" });
-  }
+  // Orders
+  createOrder(body: unknown) { return this.req<{ id: string; reference: string; status: string }>("/api/orders", { method: "POST", body: JSON.stringify(body) }); }
+  order(reference: string) { return this.req<StoredOrder>(`/api/orders/${reference}`); }
+
+  productPhotoUrl(id: string) { return `${this.base}/api/products/${id}/photo`; }
+}
+
+export interface CatalogProduct {
+  id: number; type: string; main_category_id: number; name: string;
+  brand: string | null; model: string | null; image: string;
+  variant_count: number; is_discontinued: boolean; description: string;
+}
+export interface CatalogPage { data: CatalogProduct[]; paging?: { total: number; offset: number; limit: number } }
+
+export interface ProductPrices {
+  currency: string;
+  variants: Array<{ id: number; techniques: Array<{ technique_key: string; price: string }> }>;
+}
+export function minPrice(p: ProductPrices): number | null {
+  const all = p.variants.flatMap((v) => v.techniques.map((t) => Number(t.price))).filter((n) => n > 0);
+  return all.length ? Math.min(...all) : null;
+}
+
+export interface StoredOrder {
+  id: string; reference: string; status: string; email: string;
+  subtotalCents: number; currency: string;
 }

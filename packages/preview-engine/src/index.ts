@@ -1,8 +1,6 @@
 export * from "./types";
-export * from "./profile";
-export * from "./design";
+export * from "./slots";
 export * from "./compose";
+export * from "./resolver";
 export * from "./seed";
 export * from "./api";
-export { PreviewRenderer } from "./renderer";
-export type { RenderInput } from "./renderer";

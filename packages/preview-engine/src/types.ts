@@ -1,78 +1,125 @@
-/** R(y) profile of a solid of revolution, extracted from the photo's silhouette. */
-export interface Profile {
-  /** First row of the printable body (below the lid). */
-  yTop: number;
-  /** Last row of the body. */
-  yBot: number;
-  /** Axis of revolution, in px. */
-  cx: number;
-  /** Max radius in px. Sets the scale: 2*rMax equals the physical diameter. */
-  rMax: number;
-  /** Radius per row, indexed by absolute y. 0 outside the body. */
-  radii: Float32Array;
-  width: number;
-  height: number;
+// Spec types — docs/pod/05-backend-schema.md section 3. One engine, both apps.
+
+export interface Rect { x: number; y: number; w: number; h: number }
+
+// ---- Product side (3.1, 3.2) ---------------------------------------------------
+
+export interface Placement {
+  placement: string;              // 'front' | 'back' | 'sleeve_left' | ...
+  imageUrl: string;               // flat template image for this panel
+  backgroundColor: string | null;
+  templateWidth: number;          // px of the template image
+  templateHeight: number;
+  printArea: { top: number; left: number; width: number; height: number }; // template px
+  printSpec: { widthPx: number; heightPx: number; dpi: number };            // print file size
+  technique: string;
 }
 
-/** Print file measurements, taken from the provider's template. */
-export interface PrintSpec {
-  widthPx: number;
-  heightPx: number;
-  dpi: number;
-  /**
-   * How many degrees of the product the file's width covers.
-   *
-   * Not a yes/no. The Wine Tumbler wraps ~360 but a mug with a handle only ~320: its
-   * print area is 9in over a ~10in circumference. As a boolean, anything short of a
-   * full turn was mapped wrong.
-   *
-   * 360 on a closed cylinder; less when a handle or seam eats the rest. Flat surfaces
-   * (tees) do not apply: use `null`.
-   */
-  wrapDegrees: number | null;
-  /** Provider bleed margin, in file px. */
-  bleedPx: number;
+export interface Variant {
+  id: number;
+  size: string | null;
+  color: string | null;
+  colorCode: string | null;
+  image: string;
 }
 
-/** Degrees a `widthIn` file covers on a product of `diameterIn`. */
-export function wrapDegreesFor(widthIn: number, diameterIn: number): number {
-  return Math.min(360, (widthIn / (Math.PI * diameterIn)) * 360);
+// ---- Elements (3.3) ------------------------------------------------------------
+
+export interface ElementBase {
+  id: string;
+  placement: string;
+  rect: Rect;                     // in the placement's print-file coordinates
+  z: number;
+  rotation?: number;
+  locked?: boolean;
+  hidden?: boolean;
 }
 
-/** Printable band over the photo. The silhouette does not give it: the admin marks it. */
-export interface PrintBand {
-  /** Row where the band starts. */
-  yStart: number;
-  /** Band height in photo px. Derived from printSpec and the scale. */
-  height: number;
+export interface TextElement extends ElementBase {
+  kind: "text";
+  content: string;
+  font: string;
+  color: string;
+  align: "left" | "center" | "right";
+  maxLines: number;
+  minSizeFrac: number;
+  maxChars: number;
+  letterSpacing?: number;
+  outline?: { color: string; width: number };
+  shadow?: { color: string; blur: number; dx: number; dy: number };
+  arc?: number;
+  editable: boolean;
+  textLabel?: string;
+  colorSlot?: { label: string; options: string[]; default: string };
 }
 
-export interface Calibration {
-  /** Strength of the shading multiply. 1 = the photo as-is. */
-  shadingStrength: number;
-  /** Max angle considered legible. Defines the safe zone. */
-  safeAngleDeg: number;
+export interface GraphicElement extends ElementBase {
+  kind: "graphic";
+  assetId: string;
+  choiceSlot?: { label: string; options: string[] };
+  colorSlot?: { label: string; part: string; options: string[]; default: string };
 }
 
-export const DEFAULT_CALIBRATION: Calibration = {
-  shadingStrength: 1,
-  safeAngleDeg: 45,
-};
+export interface ImageElement extends ElementBase {
+  kind: "image";
+  storageKey: string;
+  aspect: number;
+}
 
-/**
- * Printful's Wine Tumbler (12oz, UV technique).
- *
- * Measurements read from the API: 10.58 x 3.17 in at 300 dpi. Note the same product on
- * Printify came as 10.93 x 3.00 in via sublimation. The spec belongs to the provider,
- * not the product, which is why the import carries it.
- *
- * Seed until the Printful import exists.
- */
-export const WINE_TUMBLER: PrintSpec = {
-  widthPx: 3175,
-  heightPx: 950,
-  dpi: 300,
-  // 10.58in on a ~3.37in diameter cup: very nearly a full turn.
-  wrapDegrees: 360,
-  bleedPx: 57,
-};
+export interface PatternElement extends ElementBase {
+  kind: "pattern";
+  source: { assetId?: string; storageKey?: string };
+  type: "half_drop" | "block" | "brick" | "reflect" | "line_h" | "line_v";
+  scale: number;
+  spacing: number;
+  color?: string;
+}
+
+export interface BackgroundElement extends ElementBase {
+  kind: "background";
+  fill: { color?: string; assetId?: string; storageKey?: string };
+}
+
+export type Element =
+  | TextElement | GraphicElement | ImageElement | PatternElement | BackgroundElement;
+
+// ---- Slot values (3.4) ---------------------------------------------------------
+// '<id>' -> text, '<id>.graphic' -> asset id, '<id>.color' -> hex
+export type SlotValues = Record<string, string>;
+
+// ---- Client-facing aggregates --------------------------------------------------
+
+export interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  status: "draft" | "published";
+  source: string;
+  externalProductId: string;
+  externalVariantId: string | null;
+  hasPhoto: boolean;
+  retailPriceCents: number;
+  currency: string;
+  placements: Placement[];
+  variantTemplates: Record<number, Placement[]> | null;
+  variants: Variant[];
+  techniques: string[];
+}
+
+export interface Design {
+  id: string;
+  productId: string;
+  name: string;
+  status: "draft" | "published";
+  elements: Element[];
+}
+
+/** An owner graphic in the library. */
+export interface Asset {
+  id: string;
+  name: string;
+  collection: string | null;
+  kind: "svg" | "png";
+  aspect: number;
+  recolorParts: string[];
+}
