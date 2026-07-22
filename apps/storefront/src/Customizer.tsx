@@ -19,6 +19,7 @@ export function Customizer({ slug }: { slug: string }) {
   const [color, setColor] = useState<string | null>(null);
   const [mockups, setMockups] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,7 +64,9 @@ export function Customizer({ slug }: { slug: string }) {
   const reason = !variant ? "Choose size and color" : overflow ? "Text is too long" : "";
 
   const realistic = async () => {
-    setBusy(true); setMockups(null);
+    setBusy(true); setMockups(null); setElapsed(0);
+    const t0 = Date.now();
+    const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500);
     try {
       const files = [];
       for (const pl of placements) {
@@ -74,7 +77,7 @@ export function Customizer({ slug }: { slug: string }) {
       }
       setMockups(await api.mockup(product.id, files));
     } catch (e) { setError(String((e as Error).message ?? e)); }
-    finally { setBusy(false); }
+    finally { clearInterval(tick); setBusy(false); }
   };
 
   const addToCart = () => {
@@ -132,7 +135,7 @@ export function Customizer({ slug }: { slug: string }) {
           </div>
         ))}
 
-        <button className="btn wide" onClick={realistic} disabled={busy}>{busy ? "Rendering…" : "Show realistic preview"}</button>
+        <button className="btn wide" onClick={realistic} disabled={busy}>{busy ? `Rendering… ${elapsed}s` : "Show realistic preview"}</button>
 
         <div className="buy">
           <span className="mono price big">${(product.retailPriceCents / 100).toFixed(2)}</span>

@@ -70,6 +70,11 @@ input:focus, select:focus { border-color: var(--signal); }
 .mockup-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .mockup-row img { width: 180px; border: 1px solid var(--line); border-radius: 3px; }
 .buy { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+/* Mobile: Add to cart sticks to the bottom (spec 5.4). */
+@media (max-width: 900px) {
+  .buy { position: sticky; bottom: 0; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); padding: 12px 0; margin: 0 -4px; }
+  .cz-controls .cta.wide, .chip, .sw, .tile { min-height: 44px; }
+}
 
 /* Cart & checkout */
 .cart, .checkout, .order-saved, .empty-cart { display: flex; flex-direction: column; gap: 14px; }

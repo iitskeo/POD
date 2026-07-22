@@ -23,6 +23,7 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
   const [status, setStatus] = useState("");
   const [mockups, setMockups] = useState<string[] | null>(null);
   const [mockupBusy, setMockupBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quick, setQuick] = useState<{ id: string; name: string; elements: Element[] }[]>([]);
 
@@ -152,7 +153,9 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
 
   const genMockup = async () => {
     if (!product) return;
-    setMockupBusy(true); setMockups(null);
+    setMockupBusy(true); setMockups(null); setElapsed(0);
+    const t0 = Date.now();
+    const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500);
     try {
       const files = [];
       for (const pl of placements) {
@@ -164,7 +167,7 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
       if (!files.length) { setStatus("Add art first"); return; }
       setMockups(await api.mockup(productId, files));
     } catch (e) { setStatus(`Mockup failed: ${e instanceof Error ? e.message : e}`); }
-    finally { setMockupBusy(false); }
+    finally { clearInterval(tick); setMockupBusy(false); }
   };
 
   if (!product || !placement) return <p className="hint pad">Loading…</p>;
@@ -191,7 +194,7 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
         </select>
         <span className="hint">{status}</span>
         <button className="btn" onClick={() => save()}>Save</button>
-        <button className="btn" onClick={genMockup} disabled={mockupBusy}>{mockupBusy ? "Rendering…" : "Mockups"}</button>
+        <button className="btn" onClick={genMockup} disabled={mockupBusy}>{mockupBusy ? `Rendering… ${elapsed}s` : "Mockups"}</button>
         <button className="cta" onClick={() => save(product.status !== "published")}>{product.status === "published" ? "Unpublish" : "Publish"}</button>
       </div>
 
