@@ -252,6 +252,135 @@ export async function fetchTemplate(
   return placements.length ? { variantId: mapping.variant_id, placements } : null;
 }
 
+/** Exact print-file pixel size + DPI for one placement (from the printfiles endpoint). */
+export interface PrintfileSize {
+  placement: string;
+  widthPx: number;
+  heightPx: number;
+  dpi: number;
+}
+
+interface V1PrintfilesResult {
+  result: {
+    printfiles: Array<{ printfile_id: number; width: number; height: number; dpi: number }>;
+    variant_printfiles: Array<{ variant_id: number; placements: Record<string, number> }>;
+    available_placements?: Record<string, string>;
+  };
+}
+
+/**
+ * Exact print-file dimensions per placement for a variant.
+ *
+ * mockup-styles gives the print AREA in inches; printfiles gives the real px canvas
+ * Printful expects — the true "downloadable template" size. Needed so the composed PNG
+ * matches what Printful prints.
+ */
+export async function fetchPrintfiles(
+  store: StoreRow,
+  catalogProductId: number,
+  variantId: number,
+): Promise<PrintfileSize[]> {
+  const res = await fetch(
+    `https://api.printful.com/mockup-generator/printfiles/${catalogProductId}`,
+    { headers: { Authorization: `Bearer ${store.access_token}` } },
+  );
+  if (!res.ok) return [];
+  const { result } = (await res.json()) as V1PrintfilesResult;
+  const byId = new Map(result.printfiles.map((p) => [p.printfile_id, p]));
+  const vp = result.variant_printfiles.find((v) => v.variant_id === variantId)
+    ?? result.variant_printfiles[0];
+  if (!vp) return [];
+
+  const out: PrintfileSize[] = [];
+  for (const [placement, printfileId] of Object.entries(vp.placements)) {
+    const pf = byId.get(printfileId);
+    if (!pf) continue;
+    out.push({ placement, widthPx: pf.width, heightPx: pf.height, dpi: pf.dpi });
+  }
+  return out;
+}
+
+/** A catalog variant with its swatch, as stored on the product. */
+export interface VariantRow {
+  id: number;
+  size: string | null;
+  color: string | null;
+  color_code: string | null;
+  image: string;
+}
+
+/** Every variant of a product, paging past Printful's 100-per-page cap. */
+export async function fetchAllVariants(
+  env: Env,
+  store: StoreRow,
+  catalogProductId: number,
+  region: string,
+): Promise<VariantRow[]> {
+  const rq = `selling_region_name=${encodeURIComponent(region)}`;
+  const first = await call<{ data: VariantRow[]; paging?: { total: number } }>(
+    env, store, `/v2/catalog-products/${catalogProductId}/catalog-variants?${rq}&limit=100&offset=0`,
+  );
+  const total = first.paging?.total ?? first.data.length;
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, Math.ceil((total - 100) / 100)) }, (_, i) =>
+      call<{ data: VariantRow[] }>(
+        env, store,
+        `/v2/catalog-products/${catalogProductId}/catalog-variants?${rq}&limit=100&offset=${(i + 1) * 100}`,
+      ),
+    ),
+  );
+  return [...first.data, ...rest.flatMap((r) => r.data)];
+}
+
+/**
+ * Templates for every variant in one call.
+ *
+ * The templates endpoint already returns the mapping for all variants plus every
+ * template row, so per-color imagery costs a single request, not one per color.
+ * Returns the representative placements and, per variant, its placements — the caller
+ * stores only the variants whose imagery differs (spec `variant_templates`).
+ */
+export async function fetchTemplatesAll(
+  store: StoreRow,
+  catalogProductId: number,
+): Promise<{ base: PlacementTemplate[]; byVariant: Record<number, PlacementTemplate[]> } | null> {
+  const res = await fetch(
+    `https://api.printful.com/mockup-generator/templates/${catalogProductId}`,
+    { headers: { Authorization: `Bearer ${store.access_token}` } },
+  );
+  if (!res.ok) return null;
+  const { result } = (await res.json()) as V1TemplatesResult;
+  const byId = new Map(result.templates.map((t) => [t.template_id, t]));
+
+  const toPlacements = (maps: Array<{ placement: string; template_id: number }>): PlacementTemplate[] => {
+    const out: PlacementTemplate[] = [];
+    for (const { placement, template_id } of maps) {
+      const t = byId.get(template_id);
+      if (!t?.image_url) continue;
+      out.push({
+        placement,
+        imageUrl: t.image_url,
+        backgroundColor: t.background_color,
+        templateWidth: t.template_width,
+        templateHeight: t.template_height,
+        printArea: {
+          top: t.print_area_top, left: t.print_area_left,
+          width: t.print_area_width, height: t.print_area_height,
+        },
+      });
+    }
+    return out;
+  };
+
+  const byVariant: Record<number, PlacementTemplate[]> = {};
+  for (const m of result.variant_mapping) {
+    const pls = toPlacements(m.templates);
+    if (pls.length) byVariant[m.variant_id] = pls;
+  }
+  const base = byVariant[result.variant_mapping[0]?.variant_id] ?? Object.values(byVariant)[0] ?? [];
+  return base.length ? { base, byVariant } : null;
+}
+
 export interface MockupTask {
   id: number;
   status: "pending" | "completed" | "failed";
