@@ -1,238 +1,52 @@
-﻿import {
-  ApiClient,
-  DEFAULT_CALIBRATION,
-  DesignComposer,
-  PreviewRenderer,
-  SEED_ASSETS,
-  WINE_TUMBLER,
-  defaultValues,
-  diameterFromWrap,
-  extractProfile,
-  pixelsPerInch,
-  safeWidthFrac,
-  seedLibrary,
-  svgDataUrl,
-  type Design,
-  type Profile,
-  type SlotValues,
-} from "@abbiss/preview-engine";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useCart } from "./cartStore";
+import { Catalog } from "./Catalog";
+import { ProductDetail } from "./ProductDetail";
+import { Customizer } from "./Customizer";
+import { Cart } from "./Cart";
+import { Checkout } from "./Checkout";
+import { OrderSaved } from "./OrderSaved";
 
-// Deployed builds inject VITE_API_BASE; local dev falls back to the dev Worker.
-const api = new ApiClient(import.meta.env.VITE_API_BASE ?? "http://localhost:8787");
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Could not load ${src}`));
-    img.src = src;
-  });
+export function navigate(to: string) {
+  history.pushState({}, "", to);
+  dispatchEvent(new PopStateEvent("popstate"));
 }
 
-function toImageData(img: HTMLImageElement): ImageData {
-  const c = document.createElement("canvas");
-  c.width = img.naturalWidth;
-  c.height = img.naturalHeight;
-  const ctx = c.getContext("2d", { willReadFrequently: true })!;
-  ctx.drawImage(img, 0, 0);
-  return ctx.getImageData(0, 0, c.width, c.height);
+function usePath(): string {
+  const [path, setPath] = useState(location.pathname);
+  useEffect(() => {
+    const on = () => setPath(location.pathname);
+    addEventListener("popstate", on);
+    return () => removeEventListener("popstate", on);
+  }, []);
+  return path;
 }
-
-const assetName = (slug: string) => SEED_ASSETS.find((a) => a.slug === slug)?.name ?? slug;
-const assetSvg = (slug: string) => SEED_ASSETS.find((a) => a.slug === slug)?.svg ?? "";
 
 export function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const artRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
-  const rendererRef = useRef<PreviewRenderer | null>(null);
-  const composer = useMemo(() => new DesignComposer(seedLibrary()), []);
+  const path = usePath();
+  const cartLines = useCart();
+  const count = cartLines.reduce((n, l) => n + l.qty, 0);
 
-  const [design, setDesign] = useState<Design | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [values, setValues] = useState<SlotValues>({});
-  const [overflow, setOverflow] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const band = useMemo(() => {
-    if (!profile) return null;
-    const { widthPx, heightPx, dpi, wrapDegrees } = WINE_TUMBLER;
-    const diameter = diameterFromWrap(widthPx / dpi, wrapDegrees ?? 360);
-    const ppi = pixelsPerInch(profile, diameter);
-    return { yStart: profile.yTop, height: (heightPx / dpi) * ppi };
-  }, [profile]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await document.fonts.ready;
-        const [photo, published] = await Promise.all([
-          loadImage("/tumbler.png"),
-          api.listDesigns("published"),
-        ]);
-        if (cancelled) return;
-        if (published.length === 0) {
-          setError("No design has been published yet. Publish one from the admin.");
-          return;
-        }
-        const stored = published[0];
-        const d: Design = {
-          id: stored.id,
-          name: stored.name,
-          spec: WINE_TUMBLER,
-          safeAngleDeg: DEFAULT_CALIBRATION.safeAngleDeg,
-          elements: stored.elements,
-        };
-        const canvas = canvasRef.current!;
-        canvas.width = photo.naturalWidth;
-        canvas.height = photo.naturalHeight;
-        rendererRef.current = new PreviewRenderer(canvas, photo);
-        setProfile(extractProfile(toImageData(photo)));
-        setValues(defaultValues(d));
-        setDesign(d);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    const renderer = rendererRef.current;
-    if (!renderer || !design || !profile || !band) return;
-    let stale = false;
-    (async () => {
-      const res = await composer.draw(artRef.current, design, values, 0.5);
-      if (stale) return;
-      setOverflow(res.overflow);
-      renderer.render({
-        profile,
-        band,
-        art: artRef.current,
-        wrapDegrees: design.spec.wrapDegrees ?? 360,
-      });
-    })();
-    return () => { stale = true; };
-  }, [design, profile, band, values, composer]);
-
-  const set = (id: string, v: string) => setValues((p) => ({ ...p, [id]: v }));
-
-  if (error) {
-    return (
-      <div className="wrap">
-        <div className="brand">Abbiss</div>
-        <p className="eyebrow" style={{ marginTop: 40 }}>No catalog</p>
-        <h1>Nothing to customize yet.</h1>
-        <p className="lede">{error}</p>
-      </div>
-    );
-  }
-
-  const safePct = Math.round(
-    safeWidthFrac(DEFAULT_CALIBRATION.safeAngleDeg, WINE_TUMBLER.wrapDegrees) * 100,
-  );
-  const textEls = design?.elements.filter((e) => e.kind === "text" && !e.fixed) ?? [];
-  const incompleto = textEls.some((e) => !(values[e.id] ?? "").trim());
+  let page;
+  const p = path.replace(/\/+$/, "") || "/";
+  const seg = p.split("/").filter(Boolean);
+  if (p === "/") page = <Catalog />;
+  else if (seg[0] === "p") page = <ProductDetail slug={seg[1]} />;
+  else if (seg[0] === "customize") page = <Customizer slug={seg[1]} />;
+  else if (p === "/cart") page = <Cart />;
+  else if (p === "/checkout") page = <Checkout />;
+  else if (seg[0] === "order") page = <OrderSaved reference={seg[1]} />;
+  else page = <Catalog />;
 
   return (
-    <div className="wrap">
-      <div className="brand">Abbiss</div>
-
-      <header style={{ marginTop: 40 }}>
-        <p className="eyebrow">Step 01 &middot; Customize</p>
-        <h1>Your tumbler, with your name.</h1>
-        <p className="lede">
-          Pick your language, choose a color and type your name. You see it instantly,
-          exactly as it will look. No account, no sign-up.
-        </p>
+    <>
+      <header className="site-header">
+        <a className="brand" href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>Abbiss</a>
+        <a className="cart-link mono" href="/cart" onClick={(e) => { e.preventDefault(); navigate("/cart"); }}>
+          Cart{count > 0 && <span className="count">{count}</span>}
+        </a>
       </header>
-
-      <div className="studio">
-        <div className="stage">
-          <canvas ref={canvasRef} />
-        </div>
-
-        <div className="panel">
-          {design?.elements.map((el) => {
-            if (el.kind === "asset") {
-              return (
-                <div key={el.id}>
-                  {el.choice && (
-                    <div className="field">
-                      <span className="eyebrow">{el.choice.label}</span>
-                      <div className="icons">
-                        {el.choice.options.map((slug) => (
-                          <button
-                            key={slug}
-                            className="icon-btn"
-                            aria-pressed={(values[el.id] ?? el.slug) === slug}
-                            onClick={() => set(el.id, slug)}
-                            title={assetName(slug)}
-                          >
-                            <img src={svgDataUrl(assetSvg(slug))} alt={assetName(slug)} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {el.recolor
-                    .filter((r) => r.options.length > 1)
-                    .map((r) => (
-                      <div className="field" key={r.part} style={{ marginTop: 20 }}>
-                        <span className="eyebrow">{r.label}</span>
-                        <div className="swatches">
-                          {r.options.map((c) => (
-                            <button
-                              key={c}
-                              className="swatch"
-                              style={{ background: c }}
-                              aria-label={c}
-                              aria-pressed={(values[`${el.id}.${r.part}`] ?? r.default) === c}
-                              onClick={() => set(`${el.id}.${r.part}`, c)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              );
-            }
-            if (el.kind === "text" && !el.fixed) {
-              return (
-                <div className="field" key={el.id}>
-                  <span className="eyebrow">{el.label}</span>
-                  <input
-                    type="text"
-                    value={values[el.id] ?? ""}
-                    maxLength={el.maxChars}
-                    placeholder={el.placeholder}
-                    onChange={(e) => set(el.id, e.target.value)}
-                  />
-                  <p className="hint" data-warn={overflow}>
-                    {overflow
-                      ? "This runs past the safe area. Shorten the text."
-                      : `${(values[el.id] ?? "").length}/${el.maxChars} characters`}
-                  </p>
-                </div>
-              );
-            }
-            return null;
-          })}
-
-          <button className="cta" disabled={!design || overflow || incompleto}>
-            Add to cart
-          </button>
-
-          <div className="specs">
-            Wine tumbler 12 oz &middot; stainless steel
-            <br />
-            300 dpi print &middot; 10.58 &times; 3.17 in &middot; {WINE_TUMBLER.wrapDegrees}&deg; wrap
-            <br />
-            Visible from the front: {safePct}% of the design
-          </div>
-        </div>
-      </div>
-    </div>
+      <main className="site-main">{page}</main>
+    </>
   );
 }
