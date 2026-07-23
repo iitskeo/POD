@@ -51,36 +51,31 @@ A three-zone editor, Printful/Printify-class:
 - **Right:** **Properties** for the selected element (§5) and the **Customer slots**
   summary (§7).
 
-### 3.1 Live preview — always, as real as possible (owner requirement)
+### 3.1 Live preview — one universal, reliable view (DECIDED)
 
-While editing there are **two views**, both live:
-
-1. **Print-area canvas** — the flat template with the design composited inside the print
-   area. Instant. Already built. This is where you place and edit.
-2. **Live product preview** — *how it will actually look on the product*, updating in real
-   time. This must be present for **every** product, not just garments:
-   - **Flat/apparel products** (t-shirt, hoodie, tote): the flat template already reads as
-     the garment, so the print-area canvas *is* the realistic view. A garment mockup
-     angle can also be shown.
-   - **Cylindrical products** (tumbler, mug, bottle): the flat template is only an
-     unwrapped print guide, which does **not** show how it looks on the object. These need
-     a **real-time render of the art wrapped on the product photo**.
-
-> **Decision — real-time preview for non-flat products (owner asked, "even 3D").**
-> *Recommendation:* a **two-tier client-side preview**, no waiting on Printful:
-> - Tier 1 (instant, all products): the print-area canvas composition.
-> - Tier 2 (instant, cylindrical products): re-introduce the **client-side cylinder
->   compositor** (WebGL) that wraps the flat art onto the product's front photo — the
->   technique built earlier for the Wine Tumbler. It is real-time (60fps), needs only the
->   product's front photo, and gives a believable "on the object" preview.
-> - Photoreal, physically-correct mockups remain the **Printful mockup**, generated at
->   publish time (§9), not on every keystroke.
+> **Decision — a single standard preview that works for every product (owner asked for
+> "something standard that works").**
+> The **live preview is the flat design-on-template**: the design composited inside the
+> print area on the product image Printful returns for that placement. It updates in real
+> time and it works for **every** product type — tumbler, mug, box, t-shirt, cap, bag —
+> because it only composites the art into the print area on whatever template Printful
+> gives. It never breaks on non-cylindrical shapes.
 >
-> **Trade-off, stated honestly:** this reverses the earlier "flat-only in the editor"
-> decision and re-adds the cylinder engine. It is worth it because the owner needs an
-> always-on realistic preview for drinkware, and Printful's mockup is too slow to be live.
-> Full 3D models per product are out of scope (too heavy); the cylinder warp covers the
-> revolution-surface catalog (mugs, tumblers, bottles, cans).
+> This is exactly what Printful's own editor shows live while you design.
+>
+> **The cylinder/WebGL wrap is retired.** It only handled surfaces of revolution and broke
+> on anything else (boxes, flats, caps); a fragile special-case is worse than one reliable
+> view. There is no single client-side technique that renders a *photoreal* preview for
+> all product shapes without per-product 3D models — which is precisely why Printful
+> generates mockups on its servers.
+>
+> **Photoreal comes from Printful mockups** (§9), generated at publish and shown in the
+> product gallery — not on every keystroke.
+
+Honest consequence: for drinkware the live preview shows the art on the flat print
+template (a print guide or product image), not wrapped around the object. The wrapped,
+photoreal look is delivered by the mockups in the gallery. This is the standard,
+reliable trade every POD editor makes.
 
 The **same live preview powers the storefront customizer** (§10) — one engine, so what the
 customer sees equals the studio.
@@ -91,10 +86,22 @@ The owner can add:
 
 - **Text** — multiple fonts (§5.1).
 - **Images** — upload PNG/JPG/SVG.
-- **Shapes & patterns library** — a **built-in library we provide** (curated shapes,
-  patterns, simple graphics), with a **search bar** to find items by keyword ("car",
-  "star", "leaf"). This is Abbiss-owned content, not Printful's proprietary clipart (which
-  is not available via API — PRD N7b).
+- **Shapes & graphics library** — a **provided library** with a **search bar** to find
+  items by keyword ("car", "star", "leaf"). This is NOT Printful's proprietary clipart
+  (unavailable via API — PRD N7b).
+
+  > **Decision — source of the provided library (owner asked "is there a free one?").**
+  > Yes. Back the search bar with the **Iconify API** (`api.iconify.design`): 275k+ icons
+  > across 200+ open sets, with a real search endpoint that returns clean SVGs on demand —
+  > exactly a searchable library, near-zero storage on our side.
+  > **License caveat for POD:** Iconify mixes MIT / Apache-2.0 / CC-BY sets. Because the
+  > customer *prints and sells* the result (commercial redistribution), we **whitelist
+  > only permissive / CC0-friendly sets** (avoid CC-BY sets whose attribution is awkward on
+  > a physical product). For clipart-style art the cleanest license is **CC0 / public
+  > domain** — Openclipart and Public Domain Vectors are explicitly fine for manufacturing
+  > products commercially; we can seed a CC0 pack alongside Iconify.
+  > Net: **Iconify (curated safe sets) for the searchable icon/shape library, plus an
+  > optional CC0 clipart pack.** Final whitelist to confirm with the owner (§13).
 - **Owner graphics library** — the owner's own uploaded graphics, reusable across designs.
 - **Background fill** — solid color or graphic across the placement.
 - **Quick designs** — the owner's saved element combos, re-applied in one click.
@@ -174,10 +181,13 @@ The core rule: the owner authors the design, then marks each element as **Fixed*
 - **Pricing lives in My Products**, not in the studio. Each product row has a retail price
   field, status, and edit/design links.
 - **Publish** is in My Products. Publishing a product:
-  1. **Auto-generates realistic mockups** (Printful, all placements/angles). No manual
-     "generate" button for this — it happens on publish.
-  2. Shows the owner the generated mockups; the owner **picks which to feature** as the
-     product's storefront gallery images.
+  1. **Auto-generates realistic mockups** (Printful) — up to **5** angles/styles. No manual
+     "generate" button; it happens on publish.
+  2. The owner **selects which to feature, Instagram-style**: clicking mockups picks them
+     in order — the **first click is the main image (badge "1")**, the next are secondary
+     ("2", "3", …), each with a numbered circle in the corner. The owner can pick **1 to 5**,
+     always keeping exactly **one main**. The ordered selection (main first) becomes the
+     storefront product gallery.
   3. Marks the product published; it appears in the storefront.
 - **Unpublish** hides it (data retained).
 
@@ -217,7 +227,17 @@ The core rule: the owner authors the design, then marks each element as **Fixed*
   slots (already added in code as `ImageElement.choiceSlot`).
 
 ## 13. Open items to confirm with the owner
-- Provided library: how big a starter set, and which categories/tags first?
-- Cylinder live preview needs a clean **front photo** per product; confirm we take it from
-  Printful's variant image or the owner uploads one.
-- Mockup selection at publish: how many featured images max per product?
+- **Provided library whitelist:** confirm which Iconify sets (CC0 / permissive) to enable,
+  and whether to add a CC0 clipart pack. Decide the initial searchable categories.
+- Live preview: **DECIDED** — universal flat design-on-template; no cylinder engine.
+- Mockups: **DECIDED** — up to 5 at publish, Instagram-style ordered selection, 1 main.
+
+## 14. Resolved decisions log
+- Nav split: My Store / Create Products (design) / My Products (price + publish). ✓
+- Live preview: one universal flat preview; cylinder engine retired. ✓
+- Provided library: Iconify API, whitelisted to safe licenses; optional CC0 pack. ✓
+- Slot model: named required slots (text / pick-image / pick-color); slot count = number
+  of images the customer fills; a "what the customer fills" summary panel. ✓
+- Variant colors: owner curates offered colors; all sizes always offered. ✓
+- Mockups: auto-generated on publish (≤5), Instagram-style ordered pick, one main. ✓
+- Customer side: real-time flat preview; the "generate mockup" button is removed. ✓
