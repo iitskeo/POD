@@ -49,7 +49,11 @@ export class ApiClient {
   listProducts() { return this.req<Product[]>("/api/products"); }
   product(id: string) { return this.req<Product>(`/api/products/${id}`); }
   productBySlug(slug: string) { return this.req<Product>(`/api/products/slug/${slug}`); }
-  patchProduct(id: string, patch: { name?: string; retailPriceCents?: number; status?: string }) {
+  patchProduct(id: string, patch: {
+    name?: string; retailPriceCents?: number; status?: string;
+    offeredVariantColors?: string[] | null;
+    mockups?: { generated: string[]; featured: string[] } | null;
+  }) {
     return this.req<Product>(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
   }
   designForProduct(productId: string) { return this.req<Design>(`/api/designs/product/${productId}`); }

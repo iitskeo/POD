@@ -1,9 +1,11 @@
 import {
-  PlacementStage, SEED_ASSETS, makeResolver, elementLabel, svgDataUrl, renderPrintFilePng, alignRect,
-  type Align, type Asset, type BackgroundElement, type Design, type Element, type GraphicElement,
-  type ImageElement, type PatternElement, type Placement, type Product, type Rect, type SlotValues, type TextElement,
+  PlacementStage, SEED_ASSETS, SHAPE_ASSETS, ICONIFY_SETS, searchIconify, iconThumbUrl, fetchIconSvg,
+  makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf,
+  type Align, type Asset, type BackgroundElement, type Element, type GraphicElement, type IconRef,
+  type ImageElement, type PatternElement, type Placement, type Product, type Rect, type Slot,
+  type SlotValues, type TextElement,
 } from "@abbiss/preview-engine";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 
 const FONTS = ["Space Grotesk", "Inter", "IBM Plex Mono", "Arial", "Georgia", "Impact"];
@@ -12,7 +14,8 @@ const PATTERNS: PatternElement["type"][] = ["half_drop", "block", "brick", "refl
 
 interface Graphic { id: string; name: string; aspect: number; recolorParts: string[]; thumb: string }
 
-export function Composer({ productId, onBack }: { productId: string; onBack: () => void }) {
+/** Design Studio (spec 07 §3-§8): author the design; no pricing/publishing here. */
+export function Studio({ productId, onBack }: { productId: string; onBack: () => void }) {
   const resolver = useMemo(() => makeResolver(api), []);
   const [product, setProduct] = useState<Product | null>(null);
   const [elements, setElements] = useState<Element[]>([]);
@@ -21,11 +24,9 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
   const [variantId, setVariantId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
-  const [mockups, setMockups] = useState<string[] | null>(null);
-  const [mockupBusy, setMockupBusy] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quick, setQuick] = useState<{ id: string; name: string; elements: Element[] }[]>([]);
+  const [offered, setOffered] = useState<string[] | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -33,6 +34,7 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
       setProduct(p);
       setActive(p.placements[0]?.placement ?? "");
       setVariantId(p.externalVariantId ? Number(p.externalVariantId) : p.variants[0]?.id ?? null);
+      setOffered(p.offeredVariantColors);
       if (d) setElements(d.elements);
     })().catch((e) => setStatus(String(e.message ?? e)));
     api.listAssets().then(setAssets).catch(() => {});
@@ -46,6 +48,7 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
   }, [elements]);
 
   const graphics: Graphic[] = useMemo(() => [
+    ...SHAPE_ASSETS.map((a) => ({ id: a.id, name: a.name, aspect: a.aspect, recolorParts: ["shape"], thumb: svgDataUrl(a.svg) })),
     ...SEED_ASSETS.map((a) => ({ id: a.id, name: a.name, aspect: a.aspect, recolorParts: a.recolorParts, thumb: svgDataUrl(a.svg) })),
     ...assets.map((a) => ({ id: a.id, name: a.name, aspect: a.aspect, recolorParts: a.recolorParts, thumb: api.assetFileUrl(a.id) })),
   ], [assets]);
@@ -99,12 +102,23 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
     try { const a = await api.createAsset(file, file.name.replace(/\.[^.]+$/, "")); setAssets((s) => [a, ...s]); setStatus(""); }
     catch (e) { setStatus(`Failed: ${e instanceof Error ? e.message : e}`); }
   };
+  /** Import a searched icon into the owner's library and place it. */
+  const importIcon = async (ref: IconRef) => {
+    setStatus(`Adding ${ref.name}…`);
+    try {
+      const svg = await fetchIconSvg(ref);
+      const file = new File([svg], `${ref.name}.svg`, { type: "image/svg+xml" });
+      const a = await api.createAsset(file, ref.name, "library");
+      setAssets((s) => [a, ...s]);
+      addGraphic({ id: a.id, name: a.name, aspect: a.aspect, recolorParts: a.recolorParts, thumb: api.assetFileUrl(a.id) });
+      setStatus("");
+    } catch (e) { setStatus(`Failed: ${e instanceof Error ? e.message : e}`); }
+  };
   const addBackground = () => {
     const el: BackgroundElement = { id: uid(), kind: "background", placement: active, rect: { x: 0, y: 0, w: placement.printSpec.widthPx, h: placement.printSpec.heightPx }, z: 0, fill: { color: "#FF5A1F" } };
     setElements((e) => [el, ...e.map((x) => ({ ...x, z: x.z + 1 }))]); setSelectedId(el.id);
   };
 
-  // Layers ops
   const reorder = (id: string, dir: -1 | 1) => setElements((els) => {
     const same = els.filter((e) => e.placement === active).sort((a, b) => a.z - b.z);
     const i = same.findIndex((e) => e.id === id); const j = i + dir;
@@ -128,14 +142,14 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
     update(selected.id, { rect: alignRect(selected.rect, a, placement.printSpec.widthPx, placement.printSpec.heightPx) });
   };
 
-  const save = async (publish?: boolean) => {
+  const save = async () => {
     if (!product) return;
     setStatus("Saving…");
     try {
-      const st = publish ? "published" : publish === false ? "draft" : (product.status ?? "draft");
-      await api.saveDesign({ id: `design-${productId}`, productId, name: product.name, status: st, elements });
-      if (publish !== undefined) { const up = await api.patchProduct(productId, { status: st }); setProduct(up); }
-      setStatus(publish ? "Published" : publish === false ? "Unpublished" : "Saved");
+      await api.saveDesign({ id: `design-${productId}`, productId, name: product.name, status: product.status ?? "draft", elements });
+      const up = await api.patchProduct(productId, { offeredVariantColors: offered });
+      setProduct(up);
+      setStatus("Saved");
     } catch (e) { setStatus(`Error: ${e instanceof Error ? e.message : e}`); }
   };
 
@@ -151,33 +165,25 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
     setElements((e) => [...e, ...cloned]);
   };
 
-  const genMockup = async () => {
-    if (!product) return;
-    setMockupBusy(true); setMockups(null); setElapsed(0);
-    const t0 = Date.now();
-    const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500);
-    try {
-      const files = [];
-      for (const pl of placements) {
-        if (!elements.some((e) => e.placement === pl.placement)) continue;
-        const png = await renderPrintFilePng(pl, elements, values, resolver);
-        const { url } = await api.uploadPrintFile(`preview-${productId}-${pl.placement}-${Date.now()}`, png);
-        files.push({ placement: pl.placement, printFileUrl: url });
-      }
-      if (!files.length) { setStatus("Add art first"); return; }
-      setMockups(await api.mockup(productId, files));
-    } catch (e) { setStatus(`Mockup failed: ${e instanceof Error ? e.message : e}`); }
-    finally { clearInterval(tick); setMockupBusy(false); }
-  };
-
   if (!product || !placement) return <p className="hint pad">Loading…</p>;
   const countFor = (pl: string) => elements.filter((e) => e.placement === pl).length;
   const otherPlacements = placements.map((p) => p.placement).filter((p) => p !== active);
+  const colors = product.variants.filter((v, i, a) => a.findIndex((x) => x.color === v.color) === i);
+  const isOffered = (c: string | null) => offered === null || (c != null && offered.includes(c));
+  const toggleOffered = (c: string | null) => {
+    if (c == null) return;
+    setOffered((cur) => {
+      const base = cur ?? colors.map((v) => v.color).filter((x): x is string => x != null);
+      const next = base.includes(c) ? base.filter((x) => x !== c) : [...base, c];
+      return next;
+    });
+  };
+  const slots = slotsOf(elements);
 
   return (
-    <div className="composer">
-      <div className="composer-bar">
-        <button className="btn" onClick={onBack}>← Products</button>
+    <div className="studio">
+      <div className="studio-bar">
+        <button className="btn" onClick={onBack}>← Create Products</button>
         <strong className="cname">{product.name}</strong>
         <div className="placement-tabs">
           {placements.map((pl) => (
@@ -187,23 +193,21 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
           ))}
         </div>
         <div className="spacer" />
-        <select className="variant" value={variantId ?? ""} onChange={(e) => setVariantId(Number(e.target.value))} title="Garment color">
-          {product.variants.filter((v, i, a) => a.findIndex((x) => x.color === v.color) === i).map((v) => (
-            <option key={v.id} value={v.id}>{v.color ?? `Variant ${v.id}`}</option>
-          ))}
+        <select className="variant" value={variantId ?? ""} onChange={(e) => setVariantId(Number(e.target.value))} title="Garment color (preview)">
+          {colors.map((v) => <option key={v.id} value={v.id}>{v.color ?? `Variant ${v.id}`}</option>)}
         </select>
         <span className="hint">{status}</span>
-        <button className="btn" onClick={() => save()}>Save</button>
-        <button className="btn" onClick={genMockup} disabled={mockupBusy}>{mockupBusy ? `Rendering… ${elapsed}s` : "Mockups"}</button>
-        <button className="cta" onClick={() => save(product.status !== "published")}>{product.status === "published" ? "Unpublish" : "Publish"}</button>
+        <button className="cta" onClick={save}>Save</button>
       </div>
 
-      <div className="composer-grid">
+      <div className="studio-grid">
         <aside className="rail">
           <span className="eyebrow">Add</span>
           <button className="btn wide" onClick={addText}>Text</button>
           <label className="btn wide file">Upload image<input type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => e.target.files?.[0] && addUpload(e.target.files[0])} /></label>
           <button className="btn wide" onClick={addBackground}>Background fill</button>
+
+          <LibrarySearch onPick={importIcon} />
 
           <div className="row-between"><span className="eyebrow">Graphics</span>
             <label className="mini file" title="Upload a graphic to your library">+<input type="file" accept="image/svg+xml,image/png" hidden onChange={(e) => e.target.files?.[0] && addAssetFile(e.target.files[0])} /></label></div>
@@ -254,13 +258,12 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
           <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
             mode="author" selectedId={selectedId} onSelect={setSelectedId}
             onChange={(id, rect, rotation) => update(id, { rect, rotation })} onRemove={remove} />
-          <p className="hint">Anything outside the dashed print area is not printed.</p>
-          {mockups && <div className="mockups"><span className="eyebrow">Realistic mockup</span><div className="mockup-row">{mockups.map((u) => <img key={u} src={u} alt="mockup" />)}</div></div>}
+          <p className="hint">Anything outside the dashed print area is not printed. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
         </main>
 
         <aside className="props">
           <span className="eyebrow">Properties</span>
-          {!selected && <p className="hint">Select an element, or set the price below.</p>}
+          {!selected && <p className="hint">Select an element to edit it.</p>}
           {selected?.kind === "text" && <TextProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "graphic" && <GraphicProps el={selected} parts={graphicById(selected.assetId)?.recolorParts ?? []} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "image" && <ImageProps el={selected} onChange={(p) => update(selected.id, p)}
@@ -273,14 +276,83 @@ export function Composer({ productId, onBack }: { productId: string; onBack: () 
           {selected?.kind === "pattern" && <PatternProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "background" && <BackgroundProps el={selected} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
 
-          <div className="product-props">
-            <span className="eyebrow">Product</span>
-            <label className="field"><span className="hint">Retail price (USD)</span>
-              <input type="number" step="0.01" defaultValue={(product.retailPriceCents / 100).toFixed(2)}
-                onBlur={(e) => api.patchProduct(productId, { retailPriceCents: Math.round(Number(e.target.value) * 100) }).then(setProduct)} /></label>
+          <CustomerFills slots={slots} onSelect={setSelectedId} />
+
+          <div className="pgroup">
+            <span className="eyebrow">Colors offered to customers</span>
+            <p className="hint">Tick the garment colors shoppers can pick. All sizes are always offered.</p>
+            <div className="swatches">
+              {colors.map((v) => (
+                <button key={v.id} className="sw" data-on={isOffered(v.color)}
+                  style={{ background: v.colorCode ?? "#888", opacity: isOffered(v.color) ? 1 : 0.35 }}
+                  title={v.color ?? ""} onClick={() => toggleOffered(v.color)} />
+              ))}
+            </div>
+            <p className="hint">{offered === null ? "All colors offered" : `${offered.length} offered`}</p>
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+/** The searchable provided library (Iconify + shapes), spec §4. */
+function LibrarySearch({ onPick }: { onPick: (ref: IconRef) => void }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<IconRef[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (!term) { setResults([]); return; }
+    let stale = false;
+    setBusy(true);
+    const t = setTimeout(() => {
+      searchIconify(term).then((r) => { if (!stale) setResults(r); }).catch(() => {}).finally(() => { if (!stale) setBusy(false); });
+    }, 300);
+    return () => { stale = true; clearTimeout(t); };
+  }, [q]);
+
+  return (
+    <div className="library">
+      <span className="eyebrow">Shapes & graphics library</span>
+      <input className="lib-search" placeholder="Search icons (car, star, leaf…)" value={q} onChange={(e) => setQ(e.target.value)} />
+      {busy && <p className="hint">Searching…</p>}
+      {results.length > 0 && (
+        <div className="asset-grid lib-grid">
+          {results.map((ref) => (
+            <button key={ref.id} className={`asset-btn${ref.colored ? " colored" : ""}`} title={ref.name} onClick={() => onPick(ref)}>
+              <img src={iconThumbUrl(ref)} alt={ref.name} loading="lazy" />
+            </button>
+          ))}
+        </div>
+      )}
+      {q && !busy && results.length === 0 && <p className="hint">No matches in the provided sets.</p>}
+      {!q && <p className="hint">{ICONIFY_SETS.length} open icon sets · type to search</p>}
+    </div>
+  );
+}
+
+/** "What the customer fills" summary panel (spec §7.2). */
+function CustomerFills({ slots, onSelect }: { slots: Slot[]; onSelect: (id: string) => void }) {
+  const describe = (s: Slot) =>
+    s.kind === "text" ? `Text "${s.label}"`
+      : s.kind === "image" ? `Image "${s.label}" — pick 1 of ${s.options.length}`
+      : s.kind === "graphic" ? `Graphic "${s.label}" — pick 1 of ${s.options.length}`
+      : `Color "${s.label}" — pick 1 of ${s.options.length}`;
+  return (
+    <div className="pgroup fills">
+      <span className="eyebrow">What the customer fills</span>
+      {slots.length === 0 && <p className="hint">Nothing yet — mark an element as a customer slot to let shoppers change it.</p>}
+      <ul className="fills-list">
+        {slots.map((s) => (
+          <li key={`${s.elementId}.${s.kind}`}>
+            <button className="lname" onClick={() => onSelect(s.elementId)}>{describe(s)}</button>
+            <span className="req">required</span>
+          </li>
+        ))}
+      </ul>
+      {slots.length > 0 && <p className="hint">{slots.length} required {slots.length === 1 ? "choice" : "choices"} before add-to-cart.</p>}
     </div>
   );
 }

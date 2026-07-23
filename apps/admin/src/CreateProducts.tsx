@@ -4,7 +4,8 @@ import { api } from "./api";
 
 const VISIBLE = 48;
 
-export function Products({ onEdit }: { onEdit: (productId: string) => void }) {
+/** Create Products (spec 07 §2): import from Printful + open imported products in the studio. */
+export function CreateProducts({ onEdit }: { onEdit: (productId: string) => void }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [catalog, setCatalog] = useState<CatalogProduct[] | null>(null);
   const [mine, setMine] = useState<Product[]>([]);
@@ -72,9 +73,11 @@ export function Products({ onEdit }: { onEdit: (productId: string) => void }) {
 
   return (
     <div className="products pad">
+      <h1 className="page-title">Create Products</h1>
+
       {mine.length > 0 && (
         <section className="mine">
-          <span className="eyebrow">Your products</span>
+          <span className="eyebrow">Your imported products</span>
           <div className="mine-grid">
             {mine.map((p) => (
               <button key={p.id} className="mine-card" onClick={() => onEdit(p.id)}>
@@ -89,7 +92,7 @@ export function Products({ onEdit }: { onEdit: (productId: string) => void }) {
         </section>
       )}
 
-      <span className="eyebrow" style={{ marginTop: 20 }}>Printful catalog</span>
+      <span className="eyebrow" style={{ marginTop: 20 }}>Import from Printful</span>
       <input className="search" placeholder="Search by name, brand or model…" value={q} onChange={(e) => setQ(e.target.value)} />
       {error && <p className="hint warn">{error}</p>}
       {!catalog ? (

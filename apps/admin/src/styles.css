@@ -48,15 +48,64 @@ input:focus, select:focus { border-color: var(--signal); }
 .cat-img { background: var(--surface); border-radius: 3px; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; }
 .cat-img img { width: 100%; height: 100%; object-fit: contain; }
 
-/* Composer */
-.composer-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+/* App shell + sidebar (spec 07 §1) */
+.admin-shell { display: flex; min-height: 100vh; }
+.admin-main { flex: 1; min-width: 0; }
+.sidebar { width: 180px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; padding: 16px 12px; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--bone) 2%, var(--carbon)); }
+.sidebar .brand { padding: 4px 8px 12px; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; }
+.side-link { display: flex; align-items: center; gap: 9px; background: none; border: 1px solid transparent; border-radius: var(--radius); color: var(--muted); font-family: var(--body); font-size: 13px; text-align: left; padding: 9px 10px; cursor: pointer; text-decoration: none; }
+.side-link:hover { color: var(--bone); background: color-mix(in srgb, var(--bone) 5%, var(--carbon)); }
+.side-link[data-on="true"] { color: var(--signal); border-color: var(--signal); }
+.side-link .si { width: 14px; text-align: center; opacity: 0.8; }
+.side-link.muted { font-size: 11px; }
+.page-title { font-family: var(--display); font-weight: 600; font-size: 20px; margin-bottom: 4px; }
+
+/* Studio */
+.studio-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .cname { font-family: var(--display); font-size: 14px; }
 .placement-tabs { display: flex; gap: 3px; }
+.placement-tabs button { background: none; border: 1px solid transparent; border-radius: var(--radius); color: var(--muted); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 11px; cursor: pointer; }
+.placement-tabs button[data-on="true"] { color: var(--signal); border-color: var(--signal); }
 .badge { display: inline-grid; place-items: center; min-width: 15px; height: 15px; margin-left: 5px; border-radius: 999px; background: var(--signal); color: var(--ink); font-size: 9px; padding: 0 3px; }
 .variant { min-width: 120px; }
 
-.composer-grid { display: grid; grid-template-columns: 210px 1fr 280px; gap: 16px; padding: 16px; align-items: start; }
-@media (max-width: 1100px) { .composer-grid { grid-template-columns: 1fr; } }
+.studio-grid { display: grid; grid-template-columns: 220px 1fr 290px; gap: 16px; padding: 16px; align-items: start; }
+@media (max-width: 1100px) { .studio-grid { grid-template-columns: 1fr; } }
+
+/* Provided library search (spec §4) */
+.library { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.lib-search { width: 100%; font-size: 12px; }
+.lib-grid { max-height: 180px; overflow-y: auto; }
+.asset-btn.colored img { filter: none; opacity: 1; }
+
+/* Customer fills summary (spec §7.2) */
+.fills-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.fills-list li { display: flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--bone) 4%, var(--carbon)); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; }
+.fills-list .lname { flex: 1; }
+.req { font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--signal); }
+
+/* My Products rows */
+.rows { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.prod-row { display: flex; align-items: center; gap: 12px; background: color-mix(in srgb, var(--bone) 3%, var(--carbon)); border: 1px solid var(--line); border-radius: 4px; padding: 10px; }
+.prod-thumb { width: 48px; height: 48px; object-fit: contain; background: var(--surface); border-radius: 3px; flex-shrink: 0; }
+.prod-main { flex: 1; min-width: 0; }
+.prod-name { font-size: 13px; }
+.price-field { display: flex; flex-direction: column; gap: 3px; width: 110px; }
+.price-field input { padding: 7px 8px; font-size: 13px; }
+
+/* Publish modal + mockup picker (spec §9) */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: grid; place-items: center; z-index: 50; padding: 20px; }
+.modal { width: min(720px, 96vw); max-height: 88vh; overflow-y: auto; background: var(--carbon); border: 1px solid var(--line); border-radius: 6px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; }
+.modal-head strong { font-family: var(--display); font-size: 15px; }
+.modal-actions { display: flex; align-items: center; gap: 8px; }
+.mockup-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.mk-tile { position: relative; padding: 0; border: 2px solid var(--line); border-radius: 4px; overflow: hidden; cursor: pointer; background: var(--surface); aspect-ratio: 1; }
+.mk-tile.on { border-color: var(--signal); }
+.mk-tile img { width: 100%; height: 100%; object-fit: contain; }
+.mk-num { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--bone); color: var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.mk-num[data-main="true"] { background: var(--signal); color: var(--ink); }
 .rail, .props { display: flex; flex-direction: column; gap: 10px; }
 .file { display: inline-grid; place-items: center; cursor: pointer; }
 .asset-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }

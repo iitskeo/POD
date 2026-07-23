@@ -1,6 +1,7 @@
 import type { ApiClient } from "./api";
 import { recolorSvg, type Resolver } from "./compose";
 import { SEED_SVG } from "./seed";
+import { SHAPE_SVG } from "./shapes";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -30,11 +31,11 @@ export function makeResolver(api: ApiClient): Resolver {
     let hit = cache.get(key);
     if (hit) return hit;
     hit = (async () => {
-      const seed = SEED_SVG.get(assetId);
-      if (seed) {
-        // Seed graphics use a single 'trazo'/named recolor part; recolor the first one.
-        const part = [...seed.matchAll(/data-recolor="([^"]+)"/g)][0]?.[1];
-        return svgToImage(color && part ? recolorSvg(seed, part, color) : seed);
+      const bundled = SEED_SVG.get(assetId) ?? SHAPE_SVG.get(assetId);
+      if (bundled) {
+        // Bundled graphics use a single named recolor part; recolor the first one.
+        const part = [...bundled.matchAll(/data-recolor="([^"]+)"/g)][0]?.[1];
+        return svgToImage(color && part ? recolorSvg(bundled, part, color) : bundled);
       }
       // API asset: fetch bytes; recolor if it is an SVG and a color is requested.
       const url = api.assetFileUrl(assetId);

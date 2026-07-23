@@ -1,5 +1,5 @@
 import {
-  PlacementStage, makeResolver, slotsOf, defaultValues, textOverflow, renderPrintFilePng, svgDataUrl, SEED_ASSETS,
+  PlacementStage, makeResolver, slotsOf, defaultValues, textOverflow, svgDataUrl, SEED_ASSETS,
   type Design, type Placement, type Product, type SlotValues, type TextElement,
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useState } from "react";
@@ -22,9 +22,6 @@ export function Customizer({ slug }: { slug: string }) {
   const [active, setActive] = useState("");
   const [size, setSize] = useState<string | null>(null);
   const [color, setColor] = useState<string | null>(null);
-  const [mockups, setMockups] = useState<string[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,29 +58,15 @@ export function Customizer({ slug }: { slug: string }) {
   if (!product || !design || !placement) return <p className="hint pad">Loading…</p>;
 
   const sizes = [...new Set(product.variants.map((v) => v.size).filter(Boolean))] as string[];
-  const colors = [...new Set(product.variants.map((v) => v.color).filter(Boolean))] as string[];
+  // Honor the owner's offered-colors curation (spec §7.1); null = offer all.
+  const offered = product.offeredVariantColors;
+  const colors = ([...new Set(product.variants.map((v) => v.color).filter(Boolean))] as string[])
+    .filter((c) => !offered || offered.includes(c));
   const swatch = (c: string) => product.variants.find((v) => v.color === c)?.colorCode ?? "#ccc";
 
   const overflow = design.elements.some((el) => el.kind === "text" && textOverflow(el as TextElement, values));
   const canAdd = !!variant && !overflow;
   const reason = !variant ? "Choose size and color" : overflow ? "Text is too long" : "";
-
-  const realistic = async () => {
-    setBusy(true); setMockups(null); setElapsed(0);
-    const t0 = Date.now();
-    const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500);
-    try {
-      const files = [];
-      for (const pl of placements) {
-        if (!design.elements.some((e) => e.placement === pl.placement)) continue;
-        const png = await renderPrintFilePng(pl, design.elements, values, resolver);
-        const { url } = await api.uploadPrintFile(`preview-${crypto.randomUUID().slice(0, 8)}-${pl.placement}`, png);
-        files.push({ placement: pl.placement, printFileUrl: url });
-      }
-      setMockups(await api.mockup(product.id, files));
-    } catch (e) { setError(String((e as Error).message ?? e)); }
-    finally { clearInterval(tick); setBusy(false); }
-  };
 
   const addToCart = () => {
     if (!variant) return;
@@ -108,7 +91,6 @@ export function Customizer({ slug }: { slug: string }) {
         </div>
         <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize" />
         <p className="hint">Live preview — this is what prints.</p>
-        {mockups && <div className="mockup-row">{mockups.map((u) => <img key={u} src={u} alt="mockup" />)}</div>}
       </div>
 
       <aside className="cz-controls">
@@ -142,8 +124,6 @@ export function Customizer({ slug }: { slug: string }) {
             )}
           </div>
         ))}
-
-        <button className="btn wide" onClick={realistic} disabled={busy}>{busy ? `Rendering… ${elapsed}s` : "Show realistic preview"}</button>
 
         <div className="buy">
           <span className="mono price big">${(product.retailPriceCents / 100).toFixed(2)}</span>

@@ -3,6 +3,8 @@ export * from "./slots";
 export * from "./compose";
 export * from "./resolver";
 export * from "./seed";
+export * from "./shapes";
+export * from "./iconify";
 export * from "./api";
 export * from "./util";
 export * from "./stage";

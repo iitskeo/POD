@@ -14,12 +14,20 @@ export function ProductDetail({ slug }: { slug: string }) {
   if (product === "missing") return <p className="hint pad">Product not found.</p>;
 
   const sizes = [...new Set(product.variants.map((v) => v.size).filter(Boolean))];
-  const colors = [...new Set(product.variants.map((v) => v.color).filter(Boolean))];
+  const offered = product.offeredVariantColors;
+  const colors = ([...new Set(product.variants.map((v) => v.color).filter(Boolean))] as string[])
+    .filter((c) => !offered || offered.includes(c));
+  // Owner-curated mockups (main first) are the gallery; fall back to the product photo.
+  const featured = product.mockups?.featured ?? [];
 
   return (
     <div className="pd">
       <div className="pd-gallery">
-        {product.hasPhoto ? <img src={api.productPhotoUrl(product.id)} alt={product.name} /> : <div className="ph" />}
+        {featured.length > 0 ? (
+          featured.map((url, i) => <img key={url} src={url} alt={`${product.name} ${i + 1}`} data-main={i === 0} />)
+        ) : product.hasPhoto ? (
+          <img src={api.productPhotoUrl(product.id)} alt={product.name} />
+        ) : <div className="ph" />}
       </div>
       <div className="pd-info">
         <h1>{product.name}</h1>

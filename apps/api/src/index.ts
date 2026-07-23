@@ -63,6 +63,7 @@ interface ProductRow {
   external_product_id: string; external_variant_id: string | null; photo_key: string | null;
   retail_price_cents: number; currency: string; placements: string;
   variant_templates: string | null; variants: string; techniques: string | null;
+  offered_variant_colors: string | null; mockups: string | null;
 }
 
 function rowToProduct(r: ProductRow) {
@@ -75,6 +76,8 @@ function rowToProduct(r: ProductRow) {
     variantTemplates: r.variant_templates ? JSON.parse(r.variant_templates) : null,
     variants: JSON.parse(r.variants) as Variant[],
     techniques: r.techniques ? JSON.parse(r.techniques) : [],
+    offeredVariantColors: r.offered_variant_colors ? JSON.parse(r.offered_variant_colors) as string[] : null,
+    mockups: r.mockups ? JSON.parse(r.mockups) as { generated: string[]; featured: string[] } : null,
   };
 }
 
@@ -514,16 +517,27 @@ export default {
       }
       if (prodId && req.method === "PATCH") {
         if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
-        const body = (await req.json()) as { name?: string; retailPriceCents?: number; status?: string };
+        const body = (await req.json()) as {
+          name?: string; retailPriceCents?: number; status?: string;
+          offeredVariantColors?: string[] | null;
+          mockups?: { generated: string[]; featured: string[] } | null;
+        };
         const cur = await env.DB.prepare("SELECT * FROM products WHERE id = ?")
           .bind(prodId[1]).first<ProductRow>();
         if (!cur) return json({ error: "not found" }, { status: 404 }, headers);
+        const offered = body.offeredVariantColors !== undefined
+          ? (body.offeredVariantColors ? JSON.stringify(body.offeredVariantColors) : null)
+          : cur.offered_variant_colors;
+        const mockups = body.mockups !== undefined
+          ? (body.mockups ? JSON.stringify(body.mockups) : null)
+          : cur.mockups;
         await env.DB.prepare(
-          "UPDATE products SET name=?1, retail_price_cents=?2, status=?3, updated_at=?4 WHERE id=?5",
+          "UPDATE products SET name=?1, retail_price_cents=?2, status=?3, offered_variant_colors=?4, mockups=?5, updated_at=?6 WHERE id=?7",
         ).bind(
           body.name ?? cur.name,
           body.retailPriceCents ?? cur.retail_price_cents,
           body.status ?? cur.status,
+          offered, mockups,
           Date.now(), prodId[1],
         ).run();
         // Keep the design's status mirrored to the product's.

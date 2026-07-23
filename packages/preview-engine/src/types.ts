@@ -107,6 +107,10 @@ export interface Product {
   variantTemplates: Record<number, Placement[]> | null;
   variants: Variant[];
   techniques: string[];
+  /** Owner-curated variant colors offered to the shopper. null = offer all. */
+  offeredVariantColors: string[] | null;
+  /** Printful mockups from publish. featured is ordered; the first is the main image. */
+  mockups: { generated: string[]; featured: string[] } | null;
 }
 
 export interface Design {
