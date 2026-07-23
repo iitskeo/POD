@@ -101,7 +101,34 @@ The owner can add:
   > domain** — Openclipart and Public Domain Vectors are explicitly fine for manufacturing
   > products commercially; we can seed a CC0 pack alongside Iconify.
   > Net: **Iconify (curated safe sets) for the searchable icon/shape library, plus an
-  > optional CC0 clipart pack.** Final whitelist to confirm with the owner (§13).
+  > optional CC0 clipart pack.**
+  >
+  > **Initial whitelist (owner delegated the selection; licenses verified):**
+  > | Set (Iconify prefix) | License | Use |
+  > |---|---|---|
+  > | `lucide` | ISC | Clean simple line icons |
+  > | `tabler` | MIT | ~6000 line icons incl. basic shapes |
+  > | `ph` (Phosphor) | MIT | Versatile icons, multiple weights |
+  > | `heroicons` | MIT | Simple UI/line icons |
+  > | `iconoir` | MIT | Line icons |
+  > | `material-symbols` | Apache-2.0 | Icons + basic shapes |
+  > | `fluent-emoji-flat` | MIT | Colorful flat emoji (popular/themed) |
+  > | `noto` | Apache-2.0 | Google emoji (popular/themed) |
+  >
+  > Plus a small hand-made **CC0 basic-shapes pack** (rectangle, circle, triangle, star,
+  > heart, arrow) so clean primitives are guaranteed.
+  >
+  > **License handling:** MIT/ISC/Apache need **no visible/printed attribution** (safe on
+  > merchandise); we only keep a `NOTICE`/`LICENSES` file in the repo. Apache also asks
+  > that modifications be documented — we serve icons unmodified, so this is satisfied.
+  >
+  > **Explicitly excluded (POD risk):**
+  > - **`simple-icons` and any brand/logo sets** — these are company **trademarks**;
+  >   printing them on merch for sale is a legal problem regardless of the icon license
+  >   (the same reason we avoided programming-language logos earlier). Not offered.
+  > - **CC-BY / CC-BY-SA sets** (e.g. Solar, Font Awesome, Twemoji, OpenMoji, Game Icons) —
+  >   attribution / share-alike is awkward on a physical product. Not offered.
+  > The owner can still upload their own art for anything outside this set.
 - **Owner graphics library** — the owner's own uploaded graphics, reusable across designs.
 - **Background fill** — solid color or graphic across the placement.
 - **Quick designs** — the owner's saved element combos, re-applied in one click.
@@ -227,10 +254,11 @@ The core rule: the owner authors the design, then marks each element as **Fixed*
   slots (already added in code as `ImageElement.choiceSlot`).
 
 ## 13. Open items to confirm with the owner
-- **Provided library whitelist:** confirm which Iconify sets (CC0 / permissive) to enable,
-  and whether to add a CC0 clipart pack. Decide the initial searchable categories.
+- Provided library: **DECIDED** — Iconify whitelist above (owner delegated) + CC0 shapes.
 - Live preview: **DECIDED** — universal flat design-on-template; no cylinder engine.
 - Mockups: **DECIDED** — up to 5 at publish, Instagram-style ordered selection, 1 main.
+
+*No open items remain. The editor spec is closed and ready to reconcile into 03/04/05/06.*
 
 ## 14. Resolved decisions log
 - Nav split: My Store / Create Products (design) / My Products (price + publish). ✓
