@@ -243,6 +243,7 @@ input[type="color"] { padding: 3px; height: 34px; }
 .marquee { position: absolute; border: 1px solid var(--signal); background: color-mix(in srgb, var(--signal) 12%, transparent); pointer-events: none; z-index: 3; }
 .align-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--line); }
 .guide { position: absolute; background: var(--signal); pointer-events: none; z-index: 3; }
+.space-badge { position: absolute; padding: 1px 5px; background: var(--signal); color: var(--ink); font-family: var(--mono); font-size: 10px; font-weight: 600; border-radius: 4px; pointer-events: none; z-index: 4; white-space: nowrap; transform-origin: center; }
 .guide.gx { top: 0; bottom: 0; width: 1px; transform: translateX(-0.5px); }
 .guide.gy { left: 0; right: 0; height: 1px; transform: translateY(-0.5px); }
 

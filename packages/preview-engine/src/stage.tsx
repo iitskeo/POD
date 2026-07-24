@@ -51,6 +51,42 @@ function snapAxis(anchors: number[], targets: number[], thr: number): { delta: n
   return best;
 }
 
+type Badge = { cx: number; cy: number; value: number };
+/** Detect equal spacing between the moving rect and its nearest neighbours on each axis. */
+function equalSpacing(m: Rect, os: Rect[], thr: number): { nx?: number; ny?: number; badgesX: Badge[]; badgesY: Badge[] } {
+  const badgesX: Badge[] = [], badgesY: Badge[] = [];
+  let nx: number | undefined, ny: number | undefined;
+  const oy = os.filter((o) => o.y < m.y + m.h && o.y + o.h > m.y);
+  const L = oy.filter((o) => o.x + o.w <= m.x + 1).sort((a, b) => (b.x + b.w) - (a.x + a.w))[0];
+  const R = oy.filter((o) => o.x >= m.x + m.w - 1).sort((a, b) => a.x - b.x)[0];
+  if (L && R) {
+    const inner = R.x - (L.x + L.w) - m.w;
+    if (inner > 0) {
+      const target = Math.round(L.x + L.w + inner / 2);
+      if (Math.abs(target - m.x) <= thr) {
+        nx = target;
+        const cy = m.y + m.h / 2, gap = Math.round(inner / 2);
+        badgesX.push({ cx: (L.x + L.w + target) / 2, cy, value: gap }, { cx: (target + m.w + R.x) / 2, cy, value: gap });
+      }
+    }
+  }
+  const ox = os.filter((o) => o.x < m.x + m.w && o.x + o.w > m.x);
+  const T = ox.filter((o) => o.y + o.h <= m.y + 1).sort((a, b) => (b.y + b.h) - (a.y + a.h))[0];
+  const B = ox.filter((o) => o.y >= m.y + m.h - 1).sort((a, b) => a.y - b.y)[0];
+  if (T && B) {
+    const inner = B.y - (T.y + T.h) - m.h;
+    if (inner > 0) {
+      const target = Math.round(T.y + T.h + inner / 2);
+      if (Math.abs(target - m.y) <= thr) {
+        ny = target;
+        const cx = m.x + m.w / 2, gap = Math.round(inner / 2);
+        badgesY.push({ cx, cy: (T.y + T.h + target) / 2, value: gap }, { cx, cy: (target + m.h + B.y) / 2, value: gap });
+      }
+    }
+  }
+  return { nx, ny, badgesX, badgesY };
+}
+
 /**
  * The product stage: the real template with the print area marked and the live composition
  * inside it. Author mode is a direct-manipulation surface (spec 07 §5-§6): living canvas with
@@ -67,6 +103,7 @@ export function PlacementStage({
   const viewportRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [spacing, setSpacing] = useState<{ cx: number; cy: number; value: number }[]>([]);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const authoring = mode === "author";
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -189,6 +226,12 @@ export function PlacementStage({
         if (bx) moved.x += bx.delta;
         if (by) moved.y += by.delta;
         setGuides({ x: bx ? [bx.line] : [], y: by ? [by.line] : [] });
+        // Equal-spacing snap on axes the alignment guides didn't already claim.
+        const sp = equalSpacing(moved, os, thr);
+        const showX = !bx && sp.nx !== undefined, showY = !by && sp.ny !== undefined;
+        if (showX) moved.x = sp.nx!;
+        if (showY) moved.y = sp.ny!;
+        setSpacing([...(showX ? sp.badgesX : []), ...(showY ? sp.badgesY : [])]);
         onChange?.(drag.id, moved, drag.rot);
       } else if (drag.mode === "group") {
         const rs = drag.ids.map((id) => drag.rects[id]);
@@ -207,7 +250,7 @@ export function PlacementStage({
         onChange?.(drag.id, resize(drag, dx, dy, e.shiftKey), drag.rot);
       }
     };
-    const up = () => { setDrag(null); setGuides({ x: [], y: [] }); };
+    const up = () => { setDrag(null); setGuides({ x: [], y: [] }); setSpacing([]); };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
@@ -289,6 +332,9 @@ export function PlacementStage({
         <canvas ref={canvasRef} />
         {authoring && guides.x.map((gx, i) => <span key={`gx${i}`} className="guide gx" style={{ left: `${(gx / W) * 100}%` }} />)}
         {authoring && guides.y.map((gy, i) => <span key={`gy${i}`} className="guide gy" style={{ top: `${(gy / H) * 100}%` }} />)}
+        {authoring && spacing.map((s, i) => (
+          <span key={`sp${i}`} className="space-badge" style={{ left: `${(s.cx / W) * 100}%`, top: `${(s.cy / H) * 100}%`, transform: `translate(-50%, -50%) scale(${cs})` }}>{s.value}</span>
+        ))}
         {authoring && marquee && <div className="marquee" style={pct(marquee)} />}
         {authoring && visible.map((el) => {
           const sel = selectedSet.has(el.id);
