@@ -2,7 +2,9 @@
    Storefront is light-forward; admin is a dark industrial tool. Both pull these
    tokens; each app sets its own base surface. */
 
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap");
+/* UI faces + the curated design-font library (spec 07 §9.1). Loaded in both apps so the
+   storefront preview renders the same faces as the studio (one engine, both apps). */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Poppins:wght@500;700&family=Montserrat:wght@600;800&family=Archivo:wght@600;800&family=Playfair+Display:wght@600;800&family=Lora:wght@500;700&family=Merriweather:wght@700&family=Bebas+Neue&family=Anton&family=Righteous&family=Pacifico&family=Dancing+Script:wght@600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500&display=swap");
 
 :root {
   /* Color */

@@ -5,11 +5,13 @@ import {
   type ImageElement, type PatternElement, type Placement, type Product, type Rect, type Slot,
   type SlotValues, type TextElement,
 } from "@abbiss/preview-engine";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { api } from "./api";
 import { useHistory } from "./history";
+import { FontPicker } from "./FontPicker";
+import { ColorField } from "./ColorField";
+import { getList, pushRecent, toggleFav } from "./prefs";
 
-const FONTS = ["Space Grotesk", "Inter", "IBM Plex Mono", "Arial", "Georgia", "Impact"];
 const COLORS = ["#0A0A0A", "#FFFFFF", "#FF5A1F", "#161616", "#F5F5F0", "#1D4ED8", "#DC2626", "#16A34A"];
 const PATTERNS: PatternElement["type"][] = ["half_drop", "block", "brick", "reflect", "line_h", "line_v"];
 
@@ -90,12 +92,17 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     };
     hist.commit((e) => [...e, el]); selectId(el.id);
   };
-  const addGraphic = (g: Graphic) => {
+  const addGraphicAt = (g: Graphic, cx: number, cy: number) => {
     const sp = placement.printSpec;
     const h = Math.round(sp.heightPx * 0.3), w = Math.round(h * g.aspect);
-    const el: GraphicElement = { id: uid(), kind: "graphic", placement: active, rect: centerRect(w, h), z: nextZ(), assetId: g.id };
+    const el: GraphicElement = { id: uid(), kind: "graphic", placement: active, rect: { x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), w, h }, z: nextZ(), assetId: g.id };
     hist.commit((e) => [...e, el]); selectId(el.id);
   };
+  const addGraphic = (g: Graphic) => {
+    const sp = placement.printSpec;
+    addGraphicAt(g, sp.widthPx / 2, sp.heightPx / 2);
+  };
+  const onDropAsset = (id: string, pt: { x: number; y: number }) => { const g = graphics.find((x) => x.id === id); if (g) addGraphicAt(g, pt.x, pt.y); };
   const addUpload = async (file: File) => {
     setStatus("Uploading…");
     try {
@@ -320,11 +327,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
 
           <LibrarySearch onPick={importIcon} />
 
-          <div className="section-head"><span className="eyebrow">Graphics</span>
-            <label className="mini file" title="Upload a graphic to your library"><Icon name="plus" size={15} /><input type="file" accept="image/svg+xml,image/png" hidden onChange={(e) => e.target.files?.[0] && addAssetFile(e.target.files[0])} /></label></div>
-          <div className="asset-grid">
-            {graphics.map((g) => <button key={g.id} className="asset-btn" title={g.name} onClick={() => addGraphic(g)}><img src={g.thumb} alt={g.name} /></button>)}
-          </div>
+          <GraphicsPanel graphics={graphics} onAdd={addGraphic} onUpload={addAssetFile} />
 
           <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
           <div className="quick-list">
@@ -373,7 +376,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           )}
           <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
             mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={setSelectedIds}
-            onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} />
+            onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} onDropAsset={onDropAsset} />
           <p className="hint">Anything outside the light area isn't printed. Shift-click or drag a box to select several. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
         </main>
 
@@ -408,6 +411,40 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+/** Owner graphics: search, favorites, recents, drag-to-canvas (spec §7). */
+function GraphicsPanel({ graphics, onAdd, onUpload }: { graphics: Graphic[]; onAdd: (g: Graphic) => void; onUpload: (f: File) => void }) {
+  const [q, setQ] = useState("");
+  const [fav, setFav] = useState<string[]>(() => getList("fav.graphics"));
+  const [recent, setRecent] = useState<string[]>(() => getList("recent.graphics"));
+  const add = (g: Graphic) => { setRecent(pushRecent("recent.graphics", g.id)); onAdd(g); };
+  const star = (id: string, e: ReactMouseEvent) => { e.stopPropagation(); setFav(toggleFav("fav.graphics", id)); };
+  const byId = (id: string) => graphics.find((g) => g.id === id);
+  const term = q.trim().toLowerCase();
+  const filtered = term ? graphics.filter((g) => g.name.toLowerCase().includes(term)) : graphics;
+
+  const tile = (g: Graphic) => (
+    <div key={g.id} className="asset-cell">
+      <button className="asset-btn" title={g.name} draggable
+        onDragStart={(e) => { e.dataTransfer.setData("text/asset-id", g.id); e.dataTransfer.effectAllowed = "copy"; }}
+        onClick={() => add(g)}><img src={g.thumb} alt={g.name} /></button>
+      <button className="star mini" data-on={fav.includes(g.id) || undefined} title="Favorite" onClick={(e) => star(g.id, e)}><Icon name="star" size={12} /></button>
+    </div>
+  );
+
+  return (
+    <div className="library">
+      <div className="section-head"><span className="eyebrow">My graphics</span>
+        <label className="mini file" title="Upload a graphic to your library"><Icon name="plus" size={15} /><input type="file" accept="image/svg+xml,image/png" hidden onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} /></label></div>
+      <input className="lib-search" placeholder="Search graphics…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {!term && fav.length > 0 && <><span className="eyebrow sub">Favorites</span><div className="asset-grid">{fav.map(byId).filter((g): g is Graphic => !!g).map(tile)}</div></>}
+      {!term && recent.length > 0 && <><span className="eyebrow sub">Recent</span><div className="asset-grid">{recent.map(byId).filter((g): g is Graphic => !!g).map(tile)}</div></>}
+      {!term && (fav.length > 0 || recent.length > 0) && <span className="eyebrow sub">All</span>}
+      <div className="asset-grid">{filtered.map(tile)}</div>
+      {filtered.length === 0 && <p className="hint">No graphics match “{q}”.</p>}
     </div>
   );
 }
@@ -477,11 +514,17 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
   return (
     <div className="pgroup">
       <label className="field"><span className="hint">Text</span><input value={el.content} onChange={(e) => onChange({ content: e.target.value })} /></label>
-      <div className="field row">
-        <label><span className="hint">Font</span><select value={el.font} onChange={(e) => onChange({ font: e.target.value })}>{FONTS.map((f) => <option key={f}>{f}</option>)}</select></label>
-        <label><span className="hint">Align</span><select value={el.align} onChange={(e) => onChange({ align: e.target.value as TextElement["align"] })}><option>left</option><option>center</option><option>right</option></select></label>
+      <div className="field"><span className="hint">Font</span><FontPicker value={el.font} onChange={(font) => onChange({ font })} /></div>
+      <div className="field"><span className="hint">Align</span>
+        <div className="seg">
+          {(["left", "center", "right"] as const).map((a) => (
+            <button key={a} data-on={el.align === a} onClick={() => onChange({ align: a })}>
+              <Icon name={a === "left" ? "align-left" : a === "center" ? "align-center" : "align-right"} size={15} />
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="field"><span className="hint">Color</span><div className="swatches">{COLORS.map((c) => <button key={c} className="sw" data-on={el.color === c} style={{ background: c }} onClick={() => onChange({ color: c })} />)}</div></div>
+      <ColorField label="Color" value={el.color} palette={COLORS} onChange={(color) => onChange({ color })} />
       <div className="field row">
         <label><span className="hint">Letter spacing</span><input type="number" value={el.letterSpacing ?? 0} onChange={(e) => onChange({ letterSpacing: Number(e.target.value) })} /></label>
         <label><span className="hint">Arc °</span><input type="number" value={el.arc ?? 0} onChange={(e) => onChange({ arc: Number(e.target.value) })} /></label>
@@ -604,7 +647,7 @@ function PatternProps({ el, onChange }: { el: PatternElement; onChange: (p: Part
 function BackgroundProps({ el, onChange }: { el: BackgroundElement; graphics: Graphic[]; onChange: (p: Partial<BackgroundElement>) => void }) {
   return (
     <div className="pgroup">
-      <div className="field"><span className="hint">Fill color</span><div className="swatches">{COLORS.map((c) => <button key={c} className="sw" data-on={el.fill.color === c} style={{ background: c }} onClick={() => onChange({ fill: { color: c } })} />)}</div></div>
+      <ColorField label="Fill color" value={el.fill.color} palette={COLORS} onChange={(color) => onChange({ fill: { color } })} />
     </div>
   );
 }

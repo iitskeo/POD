@@ -30,6 +30,7 @@ interface Props {
   onChangeMany?: (updates: { id: string; rect: Rect }[]) => void;
   onTransformStart?: () => void;
   onAction?: (action: string, id: string) => void;
+  onDropAsset?: (id: string, pt: { x: number; y: number }) => void;
   onRemove?: (id: string) => void;
   onOverflow?: (overflow: boolean) => void;
 }
@@ -58,7 +59,7 @@ function snapAxis(anchors: number[], targets: number[], thr: number): { delta: n
  */
 export function PlacementStage({
   placement, elements, values, resolver, mode,
-  selectedIds = [], onSelect, onSelectMany, onChange, onChangeMany, onTransformStart, onAction, onRemove, onOverflow,
+  selectedIds = [], onSelect, onSelectMany, onChange, onChangeMany, onTransformStart, onAction, onDropAsset, onRemove, onOverflow,
 }: Props) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -260,6 +261,14 @@ export function PlacementStage({
         backgroundImage: `url(${placement.imageUrl})`,
       }}
       onPointerDown={(e) => { if (authoring && !spaceHeld && e.target === e.currentTarget) startMarquee(e); }}
+      onDragOver={authoring && onDropAsset ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } : undefined}
+      onDrop={authoring && onDropAsset ? (e) => {
+        const id = e.dataTransfer.getData("text/asset-id");
+        if (!id) return;
+        e.preventDefault();
+        const p = toFilePoint(e.clientX, e.clientY);
+        onDropAsset(id, { x: p.fx, y: p.fy });
+      } : undefined}
     >
       <div className="print-area" style={{ left: `${area.left * 100}%`, top: `${area.top * 100}%`, width: `${area.width * 100}%`, height: `${area.height * 100}%` }}>
         <canvas ref={canvasRef} />
