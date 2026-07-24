@@ -7,6 +7,7 @@ import {
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
+import { useHistory } from "./history";
 
 const FONTS = ["Space Grotesk", "Inter", "IBM Plex Mono", "Arial", "Georgia", "Impact"];
 const COLORS = ["#0A0A0A", "#FFFFFF", "#FF5A1F", "#161616", "#F5F5F0", "#1D4ED8", "#DC2626", "#16A34A"];
@@ -18,7 +19,8 @@ interface Graphic { id: string; name: string; aspect: number; recolorParts: stri
 export function Studio({ productId, onBack }: { productId: string; onBack: () => void }) {
   const resolver = useMemo(() => makeResolver(api), []);
   const [product, setProduct] = useState<Product | null>(null);
-  const [elements, setElements] = useState<Element[]>([]);
+  const hist = useHistory([]);
+  const elements = hist.elements;
   const [values, setValues] = useState<SlotValues>({});
   const [active, setActive] = useState("");
   const [variantId, setVariantId] = useState<number | null>(null);
@@ -35,7 +37,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       setActive(p.placements[0]?.placement ?? "");
       setVariantId(p.externalVariantId ? Number(p.externalVariantId) : p.variants[0]?.id ?? null);
       setOffered(p.offeredVariantColors);
-      if (d) setElements(d.elements);
+      if (d) hist.reset(d.elements);
     })().catch((e) => setStatus(String(e.message ?? e)));
     api.listAssets().then(setAssets).catch(() => {});
     api.listQuickDesigns().then(setQuick).catch(() => {});
@@ -63,8 +65,8 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const selected = elements.find((e) => e.id === selectedId) ?? null;
 
   const update = (id: string, patch: Partial<Element>) =>
-    setElements((els) => els.map((e) => (e.id === id ? ({ ...e, ...patch } as Element) : e)));
-  const remove = (id: string) => { setElements((els) => els.filter((e) => e.id !== id)); setSelectedId(null); };
+    hist.commit((els) => els.map((e) => (e.id === id ? ({ ...e, ...patch } as Element) : e)), `prop:${id}`);
+  const remove = (id: string) => { hist.commit((els) => els.filter((e) => e.id !== id)); setSelectedId(null); };
   const uid = () => crypto.randomUUID().slice(0, 8);
   const nextZ = () => Math.max(0, ...elements.map((e) => e.z)) + 1;
   const centerRect = (w: number, h: number): Rect => {
@@ -79,13 +81,13 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       z: nextZ(), content: "Your text", font: "Space Grotesk", color: "#0A0A0A", align: "center",
       maxLines: 2, minSizeFrac: 0.05, maxChars: 20, editable: false,
     };
-    setElements((e) => [...e, el]); setSelectedId(el.id);
+    hist.commit((e) => [...e, el]); setSelectedId(el.id);
   };
   const addGraphic = (g: Graphic) => {
     const sp = placement.printSpec;
     const h = Math.round(sp.heightPx * 0.3), w = Math.round(h * g.aspect);
     const el: GraphicElement = { id: uid(), kind: "graphic", placement: active, rect: centerRect(w, h), z: nextZ(), assetId: g.id };
-    setElements((e) => [...e, el]); setSelectedId(el.id);
+    hist.commit((e) => [...e, el]); setSelectedId(el.id);
   };
   const addUpload = async (file: File) => {
     setStatus("Uploading…");
@@ -94,7 +96,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       const sp = placement.printSpec;
       const h = Math.round(sp.heightPx * 0.4), w = Math.round(h * (aspect || 1));
       const el: ImageElement = { id: uid(), kind: "image", placement: active, rect: centerRect(w, h), z: nextZ(), storageKey: uploadId, aspect: aspect || 1 };
-      setElements((e) => [...e, el]); setSelectedId(el.id); setStatus("");
+      hist.commit((e) => [...e, el]); setSelectedId(el.id); setStatus("");
     } catch (e) { setStatus(`Upload failed: ${e instanceof Error ? e.message : e}`); }
   };
   const addAssetFile = async (file: File) => {
@@ -116,10 +118,10 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   };
   const addBackground = () => {
     const el: BackgroundElement = { id: uid(), kind: "background", placement: active, rect: { x: 0, y: 0, w: placement.printSpec.widthPx, h: placement.printSpec.heightPx }, z: 0, fill: { color: "#FF5A1F" } };
-    setElements((e) => [el, ...e.map((x) => ({ ...x, z: x.z + 1 }))]); setSelectedId(el.id);
+    hist.commit((e) => [el, ...e.map((x) => ({ ...x, z: x.z + 1 }))]); setSelectedId(el.id);
   };
 
-  const reorder = (id: string, dir: -1 | 1) => setElements((els) => {
+  const reorder = (id: string, dir: -1 | 1) => hist.commit((els) => {
     const same = els.filter((e) => e.placement === active).sort((a, b) => a.z - b.z);
     const i = same.findIndex((e) => e.id === id); const j = i + dir;
     if (i < 0 || j < 0 || j >= same.length) return els;
@@ -129,18 +131,66 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const duplicate = (id: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
     const copy = { ...el, id: uid(), z: nextZ(), rect: { ...el.rect, x: el.rect.x + 40, y: el.rect.y + 40 } } as Element;
-    setElements((e) => [...e, copy]); setSelectedId(copy.id);
+    hist.commit((e) => [...e, copy]); setSelectedId(copy.id);
   };
   const duplicateTo = (id: string, target: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
     const copy = { ...el, id: uid(), placement: target } as Element;
-    setElements((e) => [...e, copy]);
+    hist.commit((e) => [...e, copy]);
   };
 
   const align = (a: Align) => {
     if (!selected) return;
     update(selected.id, { rect: alignRect(selected.rect, a, placement.printSpec.widthPx, placement.printSpec.heightPx) });
   };
+
+  // Live transform from the canvas (no history until the gesture starts).
+  const canvasChange = (id: string, rect: Rect, rotation: number) =>
+    hist.set((els) => els.map((e) => (e.id === id ? ({ ...e, rect, rotation } as Element) : e)));
+
+  // One-gesture slot creation (spec §6.4 / §12): make the element customer-editable.
+  const makeSlot = (id: string) => {
+    const el = elements.find((e) => e.id === id); if (!el) return;
+    if (el.kind === "text") update(id, { editable: true, textLabel: el.textLabel ?? "Your text" } as Partial<Element>);
+    else if (el.kind === "graphic" && !el.choiceSlot) update(id, { choiceSlot: { label: "Choose image", options: [el.assetId] } } as Partial<Element>);
+    else if (el.kind === "image" && !el.choiceSlot) update(id, { choiceSlot: { label: "Choose image", options: [el.storageKey] } } as Partial<Element>);
+    setSelectedId(id);
+  };
+
+  // Contextual floating-toolbar actions (spec §6.4).
+  const onAction = (action: string, id: string) => {
+    if (action === "duplicate") duplicate(id);
+    else if (action === "delete") remove(id);
+    else if (action === "forward") reorder(id, 1);
+    else if (action === "back") reorder(id, -1);
+    else if (action === "slot") makeSlot(id);
+    else if (action === "lock") { const el = elements.find((e) => e.id === id); if (el) update(id, { locked: !el.locked }); }
+  };
+
+  // Keyboard shortcuts (spec §6.5). Delete is handled inside the canvas.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? "");
+      const mod = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+      if (mod && k === "z") { e.preventDefault(); e.shiftKey ? hist.redo() : hist.undo(); return; }
+      if (mod && k === "y") { e.preventDefault(); hist.redo(); return; }
+      if (typing) return;
+      if (mod && k === "d" && selectedId) { e.preventDefault(); duplicate(selectedId); return; }
+      if (k === "escape") { setSelectedId(null); return; }
+      if (selectedId && placement && e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        const base = Math.max(1, Math.round(placement.printSpec.widthPx * 0.003)) * (e.shiftKey ? 10 : 1);
+        const dx = e.key === "ArrowLeft" ? -base : e.key === "ArrowRight" ? base : 0;
+        const dy = e.key === "ArrowUp" ? -base : e.key === "ArrowDown" ? base : 0;
+        hist.snapshot(`nudge:${selectedId}`);
+        hist.set((els) => els.map((el) => (el.id === selectedId ? ({ ...el, rect: { ...el.rect, x: el.rect.x + dx, y: el.rect.y + dy } } as Element) : el)));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, elements, placement]);
 
   const save = async () => {
     if (!product) return;
@@ -162,7 +212,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   };
   const applyQuick = (qd: { elements: Element[] }) => {
     const cloned = qd.elements.map((e) => ({ ...e, id: uid(), placement: active, z: nextZ() + e.z } as Element));
-    setElements((e) => [...e, ...cloned]);
+    hist.commit((e) => [...e, ...cloned]);
   };
 
   if (!product || !placement) return <p className="hint pad">Loading…</p>;
@@ -199,6 +249,10 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
               style={{ background: v.colorCode ?? "#888" }}
               title={v.color ?? `Variant ${v.id}`} onClick={() => setVariantId(v.id)} />
           ))}
+        </div>
+        <div className="bar-group">
+          <button className="icon-btn" title="Undo (Cmd/Ctrl+Z)" disabled={!hist.canUndo} onClick={hist.undo}><Icon name="undo-2" size={17} /></button>
+          <button className="icon-btn" title="Redo (Shift+Cmd/Ctrl+Z)" disabled={!hist.canRedo} onClick={hist.redo}><Icon name="redo-2" size={17} /></button>
         </div>
         <span className="hint">{status}</span>
         <button className="cta" onClick={save}><Icon name="check" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Save</button>
@@ -261,7 +315,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           )}
           <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
             mode="author" selectedId={selectedId} onSelect={setSelectedId}
-            onChange={(id, rect, rotation) => update(id, { rect, rotation })} onRemove={remove} />
+            onChange={canvasChange} onTransformStart={() => hist.snapshot()} onAction={onAction} onRemove={remove} />
           <p className="hint">Anything outside the dashed print area is not printed. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
         </main>
 
