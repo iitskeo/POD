@@ -1,6 +1,6 @@
 import {
   PlacementStage, SEED_ASSETS, SHAPE_ASSETS, ICONIFY_SETS, searchIconify, iconThumbUrl, fetchIconSvg,
-  makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf,
+  makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf, Icon,
   type Align, type Asset, type BackgroundElement, type Element, type GraphicElement, type IconRef,
   type ImageElement, type PatternElement, type Placement, type Product, type Rect, type Slot,
   type SlotValues, type TextElement,
@@ -183,7 +183,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   return (
     <div className="studio">
       <div className="studio-bar">
-        <button className="btn" onClick={onBack}>← Create Products</button>
+        <button className="btn" onClick={onBack}><Icon name="arrow-left" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Create Products</button>
         <strong className="cname">{product.name}</strong>
         <div className="placement-tabs">
           {placements.map((pl) => (
@@ -197,25 +197,25 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           {colors.map((v) => <option key={v.id} value={v.id}>{v.color ?? `Variant ${v.id}`}</option>)}
         </select>
         <span className="hint">{status}</span>
-        <button className="cta" onClick={save}>Save</button>
+        <button className="cta" onClick={save}><Icon name="check" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Save</button>
       </div>
 
       <div className="studio-grid">
         <aside className="rail">
           <span className="eyebrow">Add</span>
-          <button className="btn wide" onClick={addText}>Text</button>
+          <button className="btn wide" onClick={addText}><Icon name="type" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Text</button>
           <label className="btn wide file">Upload image<input type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => e.target.files?.[0] && addUpload(e.target.files[0])} /></label>
-          <button className="btn wide" onClick={addBackground}>Background fill</button>
+          <button className="btn wide" onClick={addBackground}><Icon name="square" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Background fill</button>
 
           <LibrarySearch onPick={importIcon} />
 
-          <div className="row-between"><span className="eyebrow">Graphics</span>
-            <label className="mini file" title="Upload a graphic to your library">+<input type="file" accept="image/svg+xml,image/png" hidden onChange={(e) => e.target.files?.[0] && addAssetFile(e.target.files[0])} /></label></div>
+          <div className="section-head"><span className="eyebrow">Graphics</span>
+            <label className="mini file" title="Upload a graphic to your library"><Icon name="plus" size={15} /><input type="file" accept="image/svg+xml,image/png" hidden onChange={(e) => e.target.files?.[0] && addAssetFile(e.target.files[0])} /></label></div>
           <div className="asset-grid">
             {graphics.map((g) => <button key={g.id} className="asset-btn" title={g.name} onClick={() => addGraphic(g)}><img src={g.thumb} alt={g.name} /></button>)}
           </div>
 
-          <div className="row-between"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}>+</button></div>
+          <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
           <div className="quick-list">
             {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
             {quick.length === 0 && <p className="hint">None yet</p>}
@@ -226,17 +226,17 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
             {[...elements].filter((e) => e.placement === active).sort((a, b) => b.z - a.z).map((el) => (
               <li key={el.id} data-on={el.id === selectedId}>
                 <button className="lname" onClick={() => setSelectedId(el.id)}>{elementLabel(el)}</button>
-                <button className="mini" title="Up" onClick={() => reorder(el.id, 1)}>↑</button>
-                <button className="mini" title="Down" onClick={() => reorder(el.id, -1)}>↓</button>
-                <button className="mini" title={el.locked ? "Unlock" : "Lock"} onClick={() => update(el.id, { locked: !el.locked })}>{el.locked ? "🔒" : "○"}</button>
-                <button className="mini" title={el.hidden ? "Show" : "Hide"} onClick={() => update(el.id, { hidden: !el.hidden })}>{el.hidden ? "◌" : "●"}</button>
-                <button className="mini" title="Duplicate" onClick={() => duplicate(el.id)}>⎘</button>
+                <button className="mini" title="Up" onClick={() => reorder(el.id, 1)}><Icon name="chevron-up" size={15} /></button>
+                <button className="mini" title="Down" onClick={() => reorder(el.id, -1)}><Icon name="chevron-down" size={15} /></button>
+                <button className="mini" data-on={el.locked || undefined} title={el.locked ? "Unlock" : "Lock"} onClick={() => update(el.id, { locked: !el.locked })}><Icon name={el.locked ? "lock" : "unlock"} size={14} /></button>
+                <button className="mini" title={el.hidden ? "Show" : "Hide"} onClick={() => update(el.id, { hidden: !el.hidden })}><Icon name={el.hidden ? "eye-off" : "eye"} size={14} /></button>
+                <button className="mini" title="Duplicate" onClick={() => duplicate(el.id)}><Icon name="copy" size={14} /></button>
                 {otherPlacements.length > 0 && (
                   <select className="dupsel" title="Duplicate to placement" value="" onChange={(e) => { if (e.target.value) duplicateTo(el.id, e.target.value); e.target.value = ""; }}>
-                    <option value="">→</option>{otherPlacements.map((p) => <option key={p} value={p}>{p}</option>)}
+                    <option value="">Copy to…</option>{otherPlacements.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 )}
-                <button className="mini" title="Delete" onClick={() => remove(el.id)}>×</button>
+                <button className="mini" title="Delete" onClick={() => remove(el.id)}><Icon name="trash" size={14} /></button>
               </li>
             ))}
             {countFor(active) === 0 && <li className="empty">No elements</li>}
@@ -247,12 +247,12 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           {selected && (
             <div className="align-bar">
               <span className="eyebrow">Align</span>
-              <button className="mini" title="Left" onClick={() => align("left")}>⬅</button>
-              <button className="mini" title="H-center" onClick={() => align("hcenter")}>↔</button>
-              <button className="mini" title="Right" onClick={() => align("right")}>➡</button>
-              <button className="mini" title="Top" onClick={() => align("top")}>⬆</button>
-              <button className="mini" title="V-center" onClick={() => align("vcenter")}>↕</button>
-              <button className="mini" title="Bottom" onClick={() => align("bottom")}>⬇</button>
+              <button className="mini" title="Left" onClick={() => align("left")}><Icon name="align-left" size={15} /></button>
+              <button className="mini" title="H-center" onClick={() => align("hcenter")}><Icon name="move-horizontal" size={15} /></button>
+              <button className="mini" title="Right" onClick={() => align("right")}><Icon name="align-right" size={15} /></button>
+              <button className="mini" title="Top" onClick={() => align("top")}><Icon name="arrow-up-line" size={15} /></button>
+              <button className="mini" title="V-center" onClick={() => align("vcenter")}><Icon name="move-vertical" size={15} /></button>
+              <button className="mini" title="Bottom" onClick={() => align("bottom")}><Icon name="arrow-down-line" size={15} /></button>
             </div>
           )}
           <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
@@ -463,7 +463,7 @@ function ImageProps({ el, onChange, addOption, onPattern }: {
             {opts.map((id) => (
               <div key={id} className={`choice-tile on${el.storageKey === id ? " def" : ""}`}>
                 <button className="ct-img" title="Set as default" onClick={() => onChange({ storageKey: id })}><img src={thumb(id)} alt="" style={{ filter: "none" }} /></button>
-                {opts.length > 1 && <button className="ct-tick" title="Remove" onClick={() => { const next = opts.filter((o) => o !== id); onChange({ choiceSlot: { ...el.choiceSlot!, options: next }, storageKey: el.storageKey === id ? next[0] : el.storageKey }); }}>×</button>}
+                {opts.length > 1 && <button className="ct-tick" title="Remove" onClick={() => { const next = opts.filter((o) => o !== id); onChange({ choiceSlot: { ...el.choiceSlot!, options: next }, storageKey: el.storageKey === id ? next[0] : el.storageKey }); }}><Icon name="x" size={11} /></button>}
               </div>
             ))}
           </div>

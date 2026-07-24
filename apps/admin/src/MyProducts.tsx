@@ -1,5 +1,5 @@
 import {
-  defaultValues, makeResolver, renderPrintFilePng, type Product,
+  defaultValues, makeResolver, renderPrintFilePng, Icon, type Product,
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
@@ -126,7 +126,7 @@ function PublishModal({ product, onClose, onPublished }: {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <strong>Publish · {product.name}</strong>
-          <button className="mini" onClick={onClose}>×</button>
+          <button className="mini" title="Close" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
 
         {error && <p className="hint warn">{error}</p>}
