@@ -1,6 +1,6 @@
 import {
   PlacementStage, SEED_ASSETS, SHAPE_ASSETS, ICONIFY_SETS, searchIconify, iconThumbUrl, fetchIconSvg,
-  makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf, Icon,
+  makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf, Icon, SAMPLE_ICONS,
   type Align, type Asset, type BackgroundElement, type Element, type GraphicElement, type IconRef,
   type ImageElement, type ImageFilter, type PatternElement, type Placement, type Product, type Rect,
   type Slot, type SlotValues, type TextElement,
@@ -29,7 +29,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dragLayer, setDragLayer] = useState<string | null>(null);
   const [overLayer, setOverLayer] = useState<string | null>(null);
-  const [panel, setPanel] = useState<"add" | "library" | "graphics" | "templates">("add");
+  const [panel, setPanel] = useState<"add" | "library" | "graphics">("add");
   const selectId = (id: string) => setSelectedIds([id]);
   const clearSel = () => setSelectedIds([]);
   // Clicking any grouped element selects the whole group (spec §6.6).
@@ -48,7 +48,6 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const selectManyExpanded = (ids: string[]) => setSelectedIds(expandGroups(ids));
   const [status, setStatus] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [quick, setQuick] = useState<{ id: string; name: string; elements: Element[] }[]>([]);
   const [offered, setOffered] = useState<string[] | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [toast, setToast] = useState<{ msg: string; action?: { label: string; fn: () => void } } | null>(null);
@@ -73,7 +72,6 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       loadedRef.current = true;
     })().catch((e) => setStatus(String(e.message ?? e)));
     api.listAssets().then(setAssets).catch(() => {});
-    api.listQuickDesigns().then(setQuick).catch(() => {});
   }, [productId]);
 
   useEffect(() => {
@@ -327,60 +325,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elements, offered]);
 
-  // Start-from-template seeds (spec §13). Fully editable once applied.
-  const TEMPLATES = [
-    { id: "statement", name: "Big statement" },
-    { id: "stacked", name: "Stacked headline" },
-    { id: "sticker", name: "Sticker pop" },
-  ];
-  const applyTemplate = (id: string) => {
-    const sp = placement.printSpec;
-    const mk = (p: Partial<TextElement>): TextElement => ({
-      id: uid(), kind: "text", placement: active, z: nextZ(), content: "Text", font: "Space Grotesk",
-      color: "#0A0A0A", align: "center", maxLines: 2, minSizeFrac: 0.05, maxChars: 20, editable: false,
-      rect: centerRect(Math.round(sp.widthPx * 0.75), Math.round(sp.heightPx * 0.18)), ...p,
-    });
-    let els: Element[] = [];
-    if (id === "statement") els = [mk({ content: "BOLD", font: "Anton", rect: centerRect(Math.round(sp.widthPx * 0.82), Math.round(sp.heightPx * 0.22)) })];
-    else if (id === "stacked") els = [
-      mk({ content: "HEADLINE", font: "Bebas Neue", rect: { x: Math.round(sp.widthPx * 0.12), y: Math.round(sp.heightPx * 0.34), w: Math.round(sp.widthPx * 0.76), h: Math.round(sp.heightPx * 0.16) } }),
-      mk({ content: "your subheading here", font: "Inter", rect: { x: Math.round(sp.widthPx * 0.18), y: Math.round(sp.heightPx * 0.52), w: Math.round(sp.widthPx * 0.64), h: Math.round(sp.heightPx * 0.08) } }),
-    ];
-    else els = [mk({ content: "NICE", font: "Righteous", outline: { color: "#FFFFFF", width: 16 }, shadow: { color: "#00000055", blur: 12, dx: 5, dy: 5 } })];
-    hist.commit((e) => [...e, ...els]); setSelectedIds(els.map((x) => x.id));
-  };
-
-  // Curated heading+body font pairings applied in one click (spec §9.1).
-  const PAIRINGS = [
-    { name: "Editorial", heading: "Playfair Display", body: "Inter" },
-    { name: "Modern", heading: "Montserrat", body: "Inter" },
-    { name: "Impact", heading: "Anton", body: "Archivo" },
-    { name: "Friendly", heading: "Poppins", body: "Lora" },
-  ];
-  const applyPairing = (p: { heading: string; body: string }) => {
-    const sp = placement.printSpec;
-    const base = (over: Partial<TextElement>): TextElement => ({
-      id: uid(), kind: "text", placement: active, z: nextZ(), content: "Text", font: "Inter",
-      color: "#0A0A0A", align: "center", maxLines: 2, minSizeFrac: 0.05, maxChars: 24, editable: false,
-      rect: centerRect(Math.round(sp.widthPx * 0.7), Math.round(sp.heightPx * 0.15)), ...over,
-    });
-    const heading = base({ content: "Heading", font: p.heading, weight: 700, rect: { x: Math.round(sp.widthPx * 0.12), y: Math.round(sp.heightPx * 0.33), w: Math.round(sp.widthPx * 0.76), h: Math.round(sp.heightPx * 0.17) } });
-    const body = base({ content: "your supporting line", font: p.body, weight: 400, rect: { x: Math.round(sp.widthPx * 0.18), y: Math.round(sp.heightPx * 0.52), w: Math.round(sp.widthPx * 0.64), h: Math.round(sp.heightPx * 0.08) } });
-    hist.commit((e) => [...e, heading, body]); setSelectedIds([heading.id, body.id]);
-  };
   const dismissCoach = () => { toggleFav("dismissed", "coach.canvas"); setCoachOff(true); };
-
-  const saveQuick = async () => {
-    const els = elements.filter((e) => e.placement === active);
-    if (!els.length) { setStatus("Nothing on this placement"); return; }
-    const name = prompt("Quick design name?") ?? "Quick design";
-    try { const qd = await api.createQuickDesign(name, els); setQuick((q) => [qd, ...q]); setStatus("Quick design saved"); }
-    catch (e) { setStatus(String((e as Error).message ?? e)); }
-  };
-  const applyQuick = (qd: { elements: Element[] }) => {
-    const cloned = qd.elements.map((e) => ({ ...e, id: uid(), placement: active, z: nextZ() + e.z } as Element));
-    hist.commit((e) => [...e, ...cloned]);
-  };
 
   if (!product || !placement) return <StudioSkeleton />;
   const countFor = (pl: string) => elements.filter((e) => e.placement === pl).length;
@@ -431,7 +376,6 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
             <button className="rail-ico" data-on={panel === "add"} title="Add" onClick={() => setPanel("add")}><Icon name="plus" size={19} /></button>
             <button className="rail-ico" data-on={panel === "library"} title="Shapes & icons library" onClick={() => setPanel("library")}><Icon name="search" size={19} /></button>
             <button className="rail-ico" data-on={panel === "graphics"} title="My graphics" onClick={() => setPanel("graphics")}><Icon name="image" size={19} /></button>
-            <button className="rail-ico" data-on={panel === "templates"} title="Templates & quick designs" onClick={() => setPanel("templates")}><Icon name="grid" size={19} /></button>
           </nav>
           <div className="rail-body">
             <div className="rail-panel">
@@ -445,24 +389,6 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
               )}
               {panel === "library" && <LibrarySearch onPick={importIcon} />}
               {panel === "graphics" && <GraphicsPanel graphics={graphics} onAdd={addGraphic} onUpload={addAssetFile} />}
-              {panel === "templates" && (
-                <>
-                  <span className="eyebrow">Start from a template</span>
-                  <div className="quick-list">{TEMPLATES.map((t) => <button key={t.id} className="btn wide sm" onClick={() => applyTemplate(t.id)}>{t.name}</button>)}</div>
-                  <span className="eyebrow sub">Font pairings</span>
-                  <div className="quick-list">{PAIRINGS.map((p) => (
-                    <button key={p.name} className="btn wide sm pairing" onClick={() => applyPairing(p)}>
-                      <span style={{ fontFamily: `'${p.heading}'` }}>{p.name}</span>
-                      <span className="hint" style={{ fontFamily: `'${p.body}'` }}>{p.heading} + {p.body}</span>
-                    </button>
-                  ))}</div>
-                  <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
-                  <div className="quick-list">
-                    {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
-                    {quick.length === 0 && <p className="hint">None yet</p>}
-                  </div>
-                </>
-              )}
             </div>
 
           <span className="eyebrow" style={{ marginTop: 14 }}>Layers</span>
@@ -539,14 +465,6 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
             <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
               mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={selectManyExpanded}
               onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} onDropAsset={onDropAsset} />
-            {countFor(active) === 0 && (
-              <div className="canvas-empty">
-                <h3>Start designing “{active}”</h3>
-                <p className="hint">Pick a template to move fast, or start from a blank canvas.</p>
-                <div className="tpl-row">{TEMPLATES.map((t) => <button key={t.id} className="btn" onClick={() => applyTemplate(t.id)}>{t.name}</button>)}</div>
-                <button className="btn ghost" onClick={addText}>Start blank</button>
-              </div>
-            )}
             {selected && !coachOff && (
               <div className="coach">
                 <span>Drag a corner to resize · hold <b>Shift</b> to free-scale · drag a box on empty canvas to multi-select</span>
@@ -719,7 +637,8 @@ function LibrarySearch({ onPick }: { onPick: (ref: IconRef) => void }) {
       {results.length > 0 && grid(results)}
       {q && !busy && results.length === 0 && <p className="hint">No matches in the provided sets.</p>}
       {!q && recent.length > 0 && <><span className="eyebrow sub">Recently used</span>{grid(recent)}</>}
-      {!q && <p className="hint">{ICONIFY_SETS.length} open icon sets · type to search</p>}
+      {!q && <><span className="eyebrow sub">Examples</span>{grid(SAMPLE_ICONS)}
+        <p className="hint">{ICONIFY_SETS.length} open icon sets · type to search 200k+ icons.</p></>}
     </div>
   );
 }

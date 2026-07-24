@@ -187,11 +187,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .el-box { position: absolute; border: 1px solid color-mix(in srgb, var(--signal) 45%, transparent); cursor: grab; }
 .el-box[data-selected="true"] { border: 1.5px solid var(--signal); }
 .el-box:active { cursor: grabbing; }
-.el-tag {
-  position: absolute; top: -16px; left: 0; transform-origin: bottom left;
-  font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--signal) 80%, var(--bone)); white-space: nowrap; pointer-events: none;
-}
 .el-handle {
   position: absolute; width: 11px; height: 11px; transform-origin: center;
   background: var(--surface); border: 1.5px solid var(--signal); border-radius: 3px;

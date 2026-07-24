@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { renderArtwork, type Resolver } from "./compose";
-import { elementLabel } from "./util";
 import { Icon } from "./icons";
 import type { Element, Placement, Rect, SlotValues } from "./types";
 
@@ -155,11 +154,20 @@ export function PlacementStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authoring, placement]);
 
+  // Keep the product in view: never let panning drift the artwork off-screen.
+  const clampPan = (p: { x: number; y: number }, z: number) => {
+    const vp = viewportRef.current;
+    if (!vp) return p;
+    const vw = vp.clientWidth, vh = vp.clientHeight;
+    const mx = Math.max(0, (vw * z - vw) / 2) + vw * 0.25;
+    const my = Math.max(0, ((vw / aspect) * z - vh) / 2) + vh * 0.25;
+    return { x: clamp(p.x, -mx, mx), y: clamp(p.y, -my, my) };
+  };
   const zoomTo = (next: number, d = { x: 0, y: 0 }) => {
     const { zoom: z, pan: p } = viewRef.current;
     const nz = clamp(next, 0.1, 8);
     setZoom(nz);
-    setPan({ x: d.x - ((d.x - p.x) / z) * nz, y: d.y - ((d.y - p.y) / z) * nz });
+    setPan(clampPan({ x: d.x - ((d.x - p.x) / z) * nz, y: d.y - ((d.y - p.y) / z) * nz }, nz));
   };
   const fitView = () => { const f = computeFit(); setFit(f); setZoom(f); setPan({ x: 0, y: 0 }); };
 
@@ -174,7 +182,7 @@ export function PlacementStage({
         const d = { x: e.clientX - r.left - r.width / 2, y: e.clientY - r.top - r.height / 2 };
         zoomTo(viewRef.current.zoom * (e.deltaY < 0 ? 1.12 : 0.89), d);
       } else {
-        setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+        setPan((p) => clampPan({ x: p.x - e.deltaX, y: p.y - e.deltaY }, viewRef.current.zoom));
       }
     };
     vp.addEventListener("wheel", onWheel, { passive: false });
@@ -263,7 +271,7 @@ export function PlacementStage({
     e.preventDefault();
     const start = { px: e.clientX, py: e.clientY, ox: pan.x, oy: pan.y };
     panRef.current = start;
-    const move = (ev: PointerEvent) => setPan({ x: start.ox + (ev.clientX - start.px), y: start.oy + (ev.clientY - start.py) });
+    const move = (ev: PointerEvent) => setPan(clampPan({ x: start.ox + (ev.clientX - start.px), y: start.oy + (ev.clientY - start.py) }, viewRef.current.zoom));
     const up = () => { panRef.current = null; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -371,7 +379,6 @@ export function PlacementStage({
                 }
               }}
             >
-              {!sel && <span className="el-tag" style={{ transform: `scale(${cs})` }}>{elementLabel(el)}</span>}
               {single === el.id && !el.locked && (
                 <>
                   <div className="el-toolbar" style={{ transform: `translateX(-50%) scale(${cs})` }} onPointerDown={(e) => e.stopPropagation()}>

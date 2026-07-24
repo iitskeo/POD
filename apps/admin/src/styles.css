@@ -206,10 +206,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 
 .row-between { display: flex; align-items: center; justify-content: space-between; margin-top: var(--s3); }
 .mini.file { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 6px; }
-.quick-list { display: flex; flex-direction: column; gap: var(--s1); }
 .btn.sm { padding: 7px 10px; font-size: var(--t-12); text-align: left; }
-.btn.pairing { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1.2; }
-.btn.pairing .hint { font-size: var(--t-11); }
 .dupsel { width: 30px; padding: 4px; font-size: var(--t-12); background: var(--elev-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text-2); cursor: pointer; }
 .align-bar { display: flex; align-items: center; gap: 2px; padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--elev-2); box-shadow: var(--highlight); }
 .align-bar .eyebrow { margin: 0 var(--s2) 0 var(--s1); }
@@ -344,17 +341,8 @@ input[type="color"] { padding: 3px; height: 34px; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
 .btn.ghost:hover { background: var(--elev-2); color: var(--text-1); }
 
-/* Guided empty state + coach tip on the canvas (spec §13). */
+/* Coach tip on the canvas (spec §13). */
 .stage-stack { position: relative; }
-.canvas-empty {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 6;
-  display: flex; flex-direction: column; align-items: center; gap: var(--s3); text-align: center;
-  padding: var(--s6) var(--s7); border: 1px solid var(--line); border-radius: var(--r-card);
-  background: color-mix(in srgb, var(--elev-2) 90%, transparent); backdrop-filter: blur(6px);
-  box-shadow: var(--shadow-3), var(--highlight); animation: fade var(--m-panel) var(--ease-out);
-}
-.canvas-empty h3 { font-family: var(--display); font-size: var(--t-16); font-weight: 600; }
-.tpl-row { display: flex; gap: var(--s2); flex-wrap: wrap; justify-content: center; }
 .coach {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
   display: flex; align-items: center; gap: var(--s2); max-width: 90%;

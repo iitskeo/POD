@@ -33,6 +33,14 @@ function toRef(id: string): IconRef {
   return { id, prefix, name, colored: COLORED.has(prefix) };
 }
 
+/** A small preview set so the owner sees the kind of content the library offers. */
+export const SAMPLE_ICONS: IconRef[] = [
+  "lucide:heart", "lucide:star", "lucide:sparkles", "lucide:crown", "lucide:sun",
+  "lucide:moon", "lucide:flame", "lucide:leaf", "lucide:mountain", "lucide:rocket",
+  "lucide:coffee", "lucide:music", "lucide:camera", "lucide:cat", "lucide:dog",
+  "lucide:skull", "lucide:anchor", "lucide:smile", "lucide:zap", "lucide:gem",
+].map(toRef);
+
 /** Search the whitelisted sets. Returns icon refs (id = "prefix:name"). */
 export async function searchIconify(query: string, limit = 64): Promise<IconRef[]> {
   const q = query.trim();

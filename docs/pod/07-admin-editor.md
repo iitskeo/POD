@@ -438,7 +438,25 @@ minute."
   **filters**; curated **pairings**; first-run tour; recently-used everywhere; group as a
   named object; per-element opacity.
 
-**P2 — power features:**
+**P2 — product refinements (official next):** owner feedback from first real use.
+1. **Blank by default.** Opening a placement starts on a truly empty canvas — no
+   "Start designing" panel, no auto-inserted text box. (Removes the §13 template
+   empty-state; keep only the guided *no-product* state.)
+2. **Faster, resilient mockups.** Publishing must not hang or fail. Move mockup
+   generation off the single held request to an **async job**: start the Printful task
+   and return its id immediately; the client polls a lightweight status endpoint and
+   shows real progress, tolerant of slow renders. (Optional future: a sub-second
+   provider such as Dynamic Mockups via PSD templates.)
+3. **Stable canvas.** Trackpad two-finger scroll must not let the artwork drift away —
+   **clamp panning** so the product always stays in view; zoom stays free.
+4. **Clean elements.** Remove the floating element label on the canvas (the orange tag);
+   a text element shows only its own text. Layer names live in the Layers panel.
+5. **Remove Templates & Quick designs.** Drop the templates panel, font pairings and
+   quick-designs entirely — not useful in practice.
+6. **Library previews.** The shapes & icons library shows a sample set of icons before
+   any search, so the owner sees what kind of content is available.
+
+**P-00 — optional, someday (deferred, not yet):**
 - **Background removal**; **command palette**; brand-kit management (multiple palettes/logos);
   design versioning/history browser; collaborative niceties; AI assists (auto-layout,
   suggest fonts/colors).
