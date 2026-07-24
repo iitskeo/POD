@@ -155,6 +155,10 @@ input:focus, select:focus { border-color: color-mix(in srgb, var(--signal) 60%, 
 .layers { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .layers li { display: flex; align-items: center; gap: 2px; background: var(--elev-2); border: 1px solid transparent; border-radius: var(--r-control); padding: 3px 5px; box-shadow: var(--highlight); }
 .layers li[data-on="true"] { border-color: color-mix(in srgb, var(--signal) 55%, transparent); box-shadow: var(--accent-glow); }
+.layers li[data-over="true"] { box-shadow: inset 0 2px 0 0 var(--signal); }
+.grip { display: inline-grid; place-items: center; width: 16px; flex-shrink: 0; color: var(--text-3); cursor: grab; }
+.grip:active { cursor: grabbing; }
+.layers li:hover .grip { color: var(--text-1); }
 .layers .empty { justify-content: center; color: var(--text-3); font-size: var(--t-12); padding: var(--s2); }
 .lname { flex: 1; text-align: left; background: none; border: 0; color: var(--text-1); font-family: var(--body); font-size: var(--t-13); cursor: pointer; padding: 5px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; background: none; border: 0; color: var(--text-3); cursor: pointer; border-radius: 6px; transition: background var(--m-micro) var(--ease-out), color var(--m-micro) var(--ease-out); }

@@ -27,6 +27,8 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [active, setActive] = useState("");
   const [variantId, setVariantId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [dragLayer, setDragLayer] = useState<string | null>(null);
+  const [overLayer, setOverLayer] = useState<string | null>(null);
   const selectId = (id: string) => setSelectedIds([id]);
   const clearSel = () => setSelectedIds([]);
   const selectOne = (id: string | null, additive?: boolean) => {
@@ -153,6 +155,19 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     const zi = same[i].z, zj = same[j].z;
     return els.map((e) => e.id === same[i].id ? { ...e, z: zj } : e.id === same[j].id ? { ...e, z: zi } : e);
   });
+  // Drag-to-reorder: move one layer to another's slot and re-number z on this placement.
+  const reorderLayers = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const ordered = elements.filter((e) => e.placement === active).sort((a, b) => b.z - a.z);
+    const from = ordered.findIndex((e) => e.id === fromId), to = ordered.findIndex((e) => e.id === toId);
+    if (from < 0 || to < 0) return;
+    const next = [...ordered];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    const zById: Record<string, number> = {};
+    next.forEach((e, i) => { zById[e.id] = next.length - i; });
+    hist.commit((els) => els.map((e) => (zById[e.id] !== undefined ? { ...e, z: zById[e.id] } : e)));
+  };
   const duplicate = (id: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
     const copy = { ...el, id: uid(), z: nextZ(), rect: { ...el.rect, x: el.rect.x + 40, y: el.rect.y + 40 } } as Element;
@@ -252,6 +267,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       if (mod && k === "y") { e.preventDefault(); hist.redo(); return; }
       if (typing) return;
       if (mod && k === "a") { e.preventDefault(); setSelectedIds(elements.filter((el) => el.placement === active).map((el) => el.id)); return; }
+      if (mod && (e.key === "]" || e.key === "[")) { e.preventDefault(); selectedIds.forEach((id) => reorder(id, e.key === "]" ? 1 : -1)); return; }
       if (mod && k === "d" && selectedIds.length) { e.preventDefault(); duplicateSel(); return; }
       if (k === "escape") { clearSel(); return; }
       if (selectedIds.length && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); removeSel(); return; }
@@ -385,10 +401,13 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           <span className="eyebrow" style={{ marginTop: 14 }}>Layers</span>
           <ul className="layers">
             {[...elements].filter((e) => e.placement === active).sort((a, b) => b.z - a.z).map((el) => (
-              <li key={el.id} data-on={selectedIds.includes(el.id)}>
+              <li key={el.id} data-on={selectedIds.includes(el.id)} data-over={overLayer === el.id || undefined} draggable
+                onDragStart={(e) => { setDragLayer(el.id); e.dataTransfer.effectAllowed = "move"; }}
+                onDragOver={(e) => { e.preventDefault(); if (dragLayer && overLayer !== el.id) setOverLayer(el.id); }}
+                onDrop={(e) => { e.preventDefault(); if (dragLayer) reorderLayers(dragLayer, el.id); setDragLayer(null); setOverLayer(null); }}
+                onDragEnd={() => { setDragLayer(null); setOverLayer(null); }}>
+                <span className="grip" title="Drag to reorder"><Icon name="grip" size={14} /></span>
                 <button className="lname" onClick={(e) => selectOne(el.id, e.shiftKey)}>{elementLabel(el)}</button>
-                <button className="mini" title="Up" onClick={() => reorder(el.id, 1)}><Icon name="chevron-up" size={15} /></button>
-                <button className="mini" title="Down" onClick={() => reorder(el.id, -1)}><Icon name="chevron-down" size={15} /></button>
                 <button className="mini" data-on={el.locked || undefined} title={el.locked ? "Unlock" : "Lock"} onClick={() => update(el.id, { locked: !el.locked })}><Icon name={el.locked ? "lock" : "unlock"} size={14} /></button>
                 <button className="mini" title={el.hidden ? "Show" : "Hide"} onClick={() => update(el.id, { hidden: !el.hidden })}><Icon name={el.hidden ? "eye-off" : "eye"} size={14} /></button>
                 <button className="mini" title="Duplicate" onClick={() => duplicate(el.id)}><Icon name="copy" size={14} /></button>
