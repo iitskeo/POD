@@ -6,6 +6,8 @@ import type { Element, Placement, Rect, SlotValues } from "./types";
 
 const EDITOR_SCALE = 0.4;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const intersects = (a: Rect, b: Rect) =>
+  !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
 
 type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 const HANDLES: { id: HandleId; x: number; y: number; cursor: string }[] = [
@@ -21,9 +23,11 @@ interface Props {
   values: SlotValues;
   resolver: Resolver;
   mode: "author" | "customize";
-  selectedId?: string | null;
-  onSelect?: (id: string | null) => void;
+  selectedIds?: string[];
+  onSelect?: (id: string | null, additive?: boolean) => void;
+  onSelectMany?: (ids: string[]) => void;
   onChange?: (id: string, rect: Rect, rotation: number) => void;
+  onChangeMany?: (updates: { id: string; rect: Rect }[]) => void;
   onTransformStart?: () => void;
   onAction?: (action: string, id: string) => void;
   onRemove?: (id: string) => void;
@@ -33,9 +37,9 @@ interface Props {
 type Drag =
   | { mode: "move"; id: string; sx: number; sy: number; rect: Rect; rot: number }
   | { mode: "resize"; id: string; sx: number; sy: number; rect: Rect; rot: number; handle: HandleId; aspect: number | null }
-  | { mode: "rotate"; id: string; cx: number; cy: number; rect: Rect; start: number };
+  | { mode: "rotate"; id: string; cx: number; cy: number; rect: Rect; start: number }
+  | { mode: "group"; ids: string[]; sx: number; sy: number; rects: Record<string, Rect> };
 
-/** Nearest snap target within threshold, across the moving element's edge/centre anchors. */
 function snapAxis(anchors: number[], targets: number[], thr: number): { delta: number; line: number } | null {
   let best: { delta: number; line: number } | null = null;
   for (const a of anchors) for (const t of targets) {
@@ -48,22 +52,23 @@ function snapAxis(anchors: number[], targets: number[], thr: number): { delta: n
 /**
  * The product stage: the real template with the print area marked and the live composition
  * inside it. Author mode is a direct-manipulation surface (spec 07 §5-§6): living canvas with
- * zoom/pan, 8-handle transform with proportional scaling, smart guides + snapping, rotate
- * snapping, and a contextual floating toolbar. Customize mode is the read-only storefront
- * preview and is left unchanged.
+ * zoom/pan, multi-select + marquee, 8-handle transform with proportional scaling, smart guides
+ * + snapping, rotate snapping, group move, and a contextual floating toolbar. Customize mode is
+ * the read-only storefront preview and is left unchanged.
  */
 export function PlacementStage({
   placement, elements, values, resolver, mode,
-  selectedId, onSelect, onChange, onTransformStart, onAction, onRemove, onOverflow,
+  selectedIds = [], onSelect, onSelectMany, onChange, onChangeMany, onTransformStart, onAction, onRemove, onOverflow,
 }: Props) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [marquee, setMarquee] = useState<Rect | null>(null);
   const authoring = mode === "author";
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
-  // Living-canvas view state (author only).
   const [zoom, setZoom] = useState(1);
   const [fit, setFit] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -149,44 +154,51 @@ export function PlacementStage({
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, [authoring]);
 
-  useEffect(() => {
-    if (mode !== "author") return;
-    const onKey = (e: KeyboardEvent) => {
-      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? "");
-      if (typing || !selectedId) return;
-      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); onRemove?.(selectedId); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode, selectedId, onRemove]);
-
   const toFile = (dx: number, dy: number) => {
     const el = surfaceRef.current!;
     const areaW = el.clientWidth * area.width, areaH = el.clientHeight * area.height;
     const z = authoring ? zoom : 1;
     return { dx: (dx / z / areaW) * W, dy: (dy / z / areaH) * H };
   };
+  const toFilePoint = (clientX: number, clientY: number) => {
+    const s = surfaceRef.current!.getBoundingClientRect();
+    const px = (clientX - s.left) / s.width, py = (clientY - s.top) / s.height;
+    return { fx: ((px - area.left) / area.width) * W, fy: ((py - area.top) / area.height) * H };
+  };
 
   useEffect(() => {
     if (!drag) return;
+    const others = (ignore: string[]) =>
+      elements.filter((x) => x.placement === placement.placement && !ignore.includes(x.id) && !x.hidden).map((x) => x.rect);
     const move = (e: PointerEvent) => {
       if (drag.mode === "rotate") {
         let ang = (Math.atan2(e.clientY - drag.cy, e.clientX - drag.cx) * 180) / Math.PI + 90;
-        if (!e.shiftKey) ang = Math.round(ang / 15) * 15;   // snap to 15° unless Shift
+        if (!e.shiftKey) ang = Math.round(ang / 15) * 15;
         onChange?.(drag.id, drag.rect, Math.round(ang));
         return;
       }
       const { dx, dy } = toFile(e.clientX - drag.sx, e.clientY - drag.sy);
+      const thr = W * 0.012;
       if (drag.mode === "move") {
         const moved = { ...drag.rect, x: Math.round(drag.rect.x + dx), y: Math.round(drag.rect.y + dy) };
-        const others = elements.filter((x) => x.placement === placement.placement && x.id !== drag.id && !x.hidden).map((x) => x.rect);
-        const thr = W * 0.012;
-        const bx = snapAxis([moved.x, moved.x + moved.w / 2, moved.x + moved.w], [0, W / 2, W, ...others.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])], thr);
-        const by = snapAxis([moved.y, moved.y + moved.h / 2, moved.y + moved.h], [0, H / 2, H, ...others.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])], thr);
+        const os = others([drag.id]);
+        const bx = snapAxis([moved.x, moved.x + moved.w / 2, moved.x + moved.w], [0, W / 2, W, ...os.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])], thr);
+        const by = snapAxis([moved.y, moved.y + moved.h / 2, moved.y + moved.h], [0, H / 2, H, ...os.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])], thr);
         if (bx) moved.x += bx.delta;
         if (by) moved.y += by.delta;
         setGuides({ x: bx ? [bx.line] : [], y: by ? [by.line] : [] });
         onChange?.(drag.id, moved, drag.rot);
+      } else if (drag.mode === "group") {
+        const rs = drag.ids.map((id) => drag.rects[id]);
+        const bx0 = Math.min(...rs.map((r) => r.x)), by0 = Math.min(...rs.map((r) => r.y));
+        const bw = Math.max(...rs.map((r) => r.x + r.w)) - bx0, bh = Math.max(...rs.map((r) => r.y + r.h)) - by0;
+        const nx = bx0 + dx, ny = by0 + dy;
+        const os = others(drag.ids);
+        const sbx = snapAxis([nx, nx + bw / 2, nx + bw], [0, W / 2, W, ...os.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])], thr);
+        const sby = snapAxis([ny, ny + bh / 2, ny + bh], [0, H / 2, H, ...os.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])], thr);
+        const adx = dx + (sbx ? sbx.delta : 0), ady = dy + (sby ? sby.delta : 0);
+        setGuides({ x: sbx ? [sbx.line] : [], y: sby ? [sby.line] : [] });
+        onChangeMany?.(drag.ids.map((id) => ({ id, rect: { ...drag.rects[id], x: Math.round(drag.rects[id].x + adx), y: Math.round(drag.rects[id].y + ady) } })));
       } else {
         onChange?.(drag.id, resize(drag, dx, dy, e.shiftKey), drag.rot);
       }
@@ -195,7 +207,7 @@ export function PlacementStage({
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-  }, [drag, elements, onChange, zoom]);
+  }, [drag, elements, onChange, onChangeMany, zoom]);
 
   const startPan = (e: ReactPointerEvent) => {
     e.preventDefault();
@@ -207,13 +219,36 @@ export function PlacementStage({
     window.addEventListener("pointerup", up);
   };
 
+  // Marquee rubber-band select on empty canvas; a pure click deselects.
+  const startMarquee = (e: ReactPointerEvent) => {
+    const sx = e.clientX, sy = e.clientY;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) moved = true;
+      if (!moved) return;
+      const p0 = toFilePoint(sx, sy), p1 = toFilePoint(ev.clientX, ev.clientY);
+      const mr = { x: Math.min(p0.fx, p1.fx), y: Math.min(p0.fy, p1.fy), w: Math.abs(p1.fx - p0.fx), h: Math.abs(p1.fy - p0.fy) };
+      setMarquee(mr);
+      onSelectMany?.(elements.filter((el) => el.placement === placement.placement && !el.hidden && intersects(el.rect, mr)).map((el) => el.id));
+    };
+    const up = () => {
+      if (!moved) onSelect?.(null);
+      setMarquee(null);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   const pct = (r: Rect) => ({
     left: `${(r.x / W) * 100}%`, top: `${(r.y / H) * 100}%`,
     width: `${(r.w / W) * 100}%`, height: `${(r.h / H) * 100}%`,
   });
 
   const visible = elements.filter((e) => e.placement === placement.placement && !e.hidden);
-  const cs = authoring ? 1 / zoom : 1;   // counter-scale so chrome stays a constant screen size
+  const cs = authoring ? 1 / zoom : 1;
+  const single = selectedIds.length === 1 ? selectedIds[0] : null;
 
   const surface = (
     <div
@@ -224,31 +259,40 @@ export function PlacementStage({
         backgroundColor: placement.backgroundColor ?? undefined,
         backgroundImage: `url(${placement.imageUrl})`,
       }}
-      onPointerDown={(e) => { if (authoring && !spaceHeld && e.target === e.currentTarget) onSelect?.(null); }}
+      onPointerDown={(e) => { if (authoring && !spaceHeld && e.target === e.currentTarget) startMarquee(e); }}
     >
       <div className="print-area" style={{ left: `${area.left * 100}%`, top: `${area.top * 100}%`, width: `${area.width * 100}%`, height: `${area.height * 100}%` }}>
         <canvas ref={canvasRef} />
         {authoring && guides.x.map((gx, i) => <span key={`gx${i}`} className="guide gx" style={{ left: `${(gx / W) * 100}%` }} />)}
         {authoring && guides.y.map((gy, i) => <span key={`gy${i}`} className="guide gy" style={{ top: `${(gy / H) * 100}%` }} />)}
+        {authoring && marquee && <div className="marquee" style={pct(marquee)} />}
         {authoring && visible.map((el) => {
-          const selected = el.id === selectedId;
+          const sel = selectedSet.has(el.id);
           const isImg = el.kind === "image" || el.kind === "graphic";
           return (
             <div
               key={el.id}
               className="el-box"
-              data-selected={selected}
+              data-selected={sel}
               style={{ ...pct(el.rect), transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined }}
               onPointerDown={(e) => {
                 if (el.locked || spaceHeld) return;
                 e.stopPropagation();
-                onSelect?.(el.id);
-                onTransformStart?.();
-                setDrag({ mode: "move", id: el.id, sx: e.clientX, sy: e.clientY, rect: el.rect, rot: el.rotation ?? 0 });
+                if (e.shiftKey) { onSelect?.(el.id, true); return; }
+                if (sel && selectedIds.length > 1) {
+                  onTransformStart?.();
+                  const rects: Record<string, Rect> = {};
+                  for (const id of selectedIds) { const g = elements.find((x) => x.id === id); if (g) rects[id] = g.rect; }
+                  setDrag({ mode: "group", ids: [...selectedIds], sx: e.clientX, sy: e.clientY, rects });
+                } else {
+                  onSelect?.(el.id, false);
+                  onTransformStart?.();
+                  setDrag({ mode: "move", id: el.id, sx: e.clientX, sy: e.clientY, rect: el.rect, rot: el.rotation ?? 0 });
+                }
               }}
             >
-              {!selected && <span className="el-tag" style={{ transform: `scale(${cs})` }}>{elementLabel(el)}</span>}
-              {selected && !el.locked && (
+              {!sel && <span className="el-tag" style={{ transform: `scale(${cs})` }}>{elementLabel(el)}</span>}
+              {single === el.id && !el.locked && (
                 <>
                   <div className="el-toolbar" style={{ transform: `translateX(-50%) scale(${cs})` }} onPointerDown={(e) => e.stopPropagation()}>
                     <button className="tb-btn" title="Let the customer change this" onClick={() => onAction?.("slot", el.id)}><Icon name="wand" size={15} /></button>

@@ -24,7 +24,13 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [values, setValues] = useState<SlotValues>({});
   const [active, setActive] = useState("");
   const [variantId, setVariantId] = useState<number | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectId = (id: string) => setSelectedIds([id]);
+  const clearSel = () => setSelectedIds([]);
+  const selectOne = (id: string | null, additive?: boolean) => {
+    if (id == null) { setSelectedIds([]); return; }
+    setSelectedIds((cur) => (additive ? (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]) : [id]));
+  };
   const [status, setStatus] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quick, setQuick] = useState<{ id: string; name: string; elements: Element[] }[]>([]);
@@ -62,11 +68,12 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     return vt ?? product.placements;
   }, [product, variantId]);
   const placement = placements.find((p) => p.placement === active) ?? placements[0];
+  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
   const selected = elements.find((e) => e.id === selectedId) ?? null;
 
   const update = (id: string, patch: Partial<Element>) =>
     hist.commit((els) => els.map((e) => (e.id === id ? ({ ...e, ...patch } as Element) : e)), `prop:${id}`);
-  const remove = (id: string) => { hist.commit((els) => els.filter((e) => e.id !== id)); setSelectedId(null); };
+  const remove = (id: string) => { hist.commit((els) => els.filter((e) => e.id !== id)); clearSel(); };
   const uid = () => crypto.randomUUID().slice(0, 8);
   const nextZ = () => Math.max(0, ...elements.map((e) => e.z)) + 1;
   const centerRect = (w: number, h: number): Rect => {
@@ -81,13 +88,13 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       z: nextZ(), content: "Your text", font: "Space Grotesk", color: "#0A0A0A", align: "center",
       maxLines: 2, minSizeFrac: 0.05, maxChars: 20, editable: false,
     };
-    hist.commit((e) => [...e, el]); setSelectedId(el.id);
+    hist.commit((e) => [...e, el]); selectId(el.id);
   };
   const addGraphic = (g: Graphic) => {
     const sp = placement.printSpec;
     const h = Math.round(sp.heightPx * 0.3), w = Math.round(h * g.aspect);
     const el: GraphicElement = { id: uid(), kind: "graphic", placement: active, rect: centerRect(w, h), z: nextZ(), assetId: g.id };
-    hist.commit((e) => [...e, el]); setSelectedId(el.id);
+    hist.commit((e) => [...e, el]); selectId(el.id);
   };
   const addUpload = async (file: File) => {
     setStatus("Uploading…");
@@ -96,7 +103,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       const sp = placement.printSpec;
       const h = Math.round(sp.heightPx * 0.4), w = Math.round(h * (aspect || 1));
       const el: ImageElement = { id: uid(), kind: "image", placement: active, rect: centerRect(w, h), z: nextZ(), storageKey: uploadId, aspect: aspect || 1 };
-      hist.commit((e) => [...e, el]); setSelectedId(el.id); setStatus("");
+      hist.commit((e) => [...e, el]); selectId(el.id); setStatus("");
     } catch (e) { setStatus(`Upload failed: ${e instanceof Error ? e.message : e}`); }
   };
   const addAssetFile = async (file: File) => {
@@ -118,7 +125,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   };
   const addBackground = () => {
     const el: BackgroundElement = { id: uid(), kind: "background", placement: active, rect: { x: 0, y: 0, w: placement.printSpec.widthPx, h: placement.printSpec.heightPx }, z: 0, fill: { color: "#FF5A1F" } };
-    hist.commit((e) => [el, ...e.map((x) => ({ ...x, z: x.z + 1 }))]); setSelectedId(el.id);
+    hist.commit((e) => [el, ...e.map((x) => ({ ...x, z: x.z + 1 }))]); selectId(el.id);
   };
 
   const reorder = (id: string, dir: -1 | 1) => hist.commit((els) => {
@@ -131,7 +138,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const duplicate = (id: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
     const copy = { ...el, id: uid(), z: nextZ(), rect: { ...el.rect, x: el.rect.x + 40, y: el.rect.y + 40 } } as Element;
-    hist.commit((e) => [...e, copy]); setSelectedId(copy.id);
+    hist.commit((e) => [...e, copy]); selectId(copy.id);
   };
   const duplicateTo = (id: string, target: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
@@ -139,14 +146,59 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     hist.commit((e) => [...e, copy]);
   };
 
+  // Align: one element snaps to the canvas; multiple align to the selection's bounding box.
   const align = (a: Align) => {
-    if (!selected) return;
-    update(selected.id, { rect: alignRect(selected.rect, a, placement.printSpec.widthPx, placement.printSpec.heightPx) });
+    const sel = elements.filter((e) => selectedIds.includes(e.id));
+    if (!sel.length) return;
+    if (sel.length === 1) { update(sel[0].id, { rect: alignRect(sel[0].rect, a, placement.printSpec.widthPx, placement.printSpec.heightPx) }); return; }
+    const bx = Math.min(...sel.map((e) => e.rect.x)), by = Math.min(...sel.map((e) => e.rect.y));
+    const br = Math.max(...sel.map((e) => e.rect.x + e.rect.w)), bb = Math.max(...sel.map((e) => e.rect.y + e.rect.h));
+    hist.commit((els) => els.map((e) => {
+      if (!selectedIds.includes(e.id)) return e;
+      const r = { ...e.rect };
+      if (a === "left") r.x = bx; else if (a === "right") r.x = br - r.w;
+      else if (a === "hcenter") r.x = Math.round((bx + br) / 2 - r.w / 2);
+      else if (a === "top") r.y = by; else if (a === "bottom") r.y = bb - r.h;
+      else if (a === "vcenter") r.y = Math.round((by + bb) / 2 - r.h / 2);
+      return { ...e, rect: r };
+    }));
+  };
+  // Distribute selected elements to equal spacing between the outermost two (needs 3+).
+  const distribute = (axis: "h" | "v") => {
+    const sel = elements.filter((e) => selectedIds.includes(e.id));
+    if (sel.length < 3) return;
+    const k: keyof Rect = axis === "h" ? "x" : "y";
+    const sz: keyof Rect = axis === "h" ? "w" : "h";
+    const sorted = [...sel].sort((a, b) => (a.rect[k] + a.rect[sz] / 2) - (b.rect[k] + b.rect[sz] / 2));
+    const c0 = sorted[0].rect[k] + sorted[0].rect[sz] / 2;
+    const c1 = sorted[sorted.length - 1].rect[k] + sorted[sorted.length - 1].rect[sz] / 2;
+    const step = (c1 - c0) / (sorted.length - 1);
+    const target: Record<string, number> = {};
+    sorted.forEach((e, i) => { target[e.id] = c0 + step * i; });
+    hist.commit((els) => els.map((e) => {
+      if (target[e.id] === undefined) return e;
+      const r = { ...e.rect }; r[k] = Math.round(target[e.id] - r[sz] / 2);
+      return { ...e, rect: r };
+    }));
   };
 
-  // Live transform from the canvas (no history until the gesture starts).
+  // Live transforms from the canvas (no history until the gesture starts).
   const canvasChange = (id: string, rect: Rect, rotation: number) =>
     hist.set((els) => els.map((e) => (e.id === id ? ({ ...e, rect, rotation } as Element) : e)));
+  const canvasChangeMany = (updates: { id: string; rect: Rect }[]) =>
+    hist.set((els) => els.map((e) => { const u = updates.find((x) => x.id === e.id); return u ? ({ ...e, rect: u.rect } as Element) : e; }));
+
+  // Selection-wide actions (spec §6.5/§6.6).
+  const removeSel = () => { if (!selectedIds.length) return; hist.commit((els) => els.filter((e) => !selectedIds.includes(e.id))); clearSel(); };
+  const duplicateSel = () => {
+    if (!selectedIds.length) return;
+    const copies = elements.filter((e) => selectedIds.includes(e.id)).map((e, i) => ({ ...e, id: uid(), z: nextZ() + i, rect: { ...e.rect, x: e.rect.x + 40, y: e.rect.y + 40 } } as Element));
+    hist.commit((e) => [...e, ...copies]); setSelectedIds(copies.map((c) => c.id));
+  };
+  const nudgeSel = (dx: number, dy: number) => {
+    hist.snapshot(`nudge:${selectedIds.join(",")}`);
+    hist.set((els) => els.map((el) => (selectedIds.includes(el.id) ? ({ ...el, rect: { ...el.rect, x: el.rect.x + dx, y: el.rect.y + dy } } as Element) : el)));
+  };
 
   // One-gesture slot creation (spec §6.4 / §12): make the element customer-editable.
   const makeSlot = (id: string) => {
@@ -154,7 +206,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     if (el.kind === "text") update(id, { editable: true, textLabel: el.textLabel ?? "Your text" } as Partial<Element>);
     else if (el.kind === "graphic" && !el.choiceSlot) update(id, { choiceSlot: { label: "Choose image", options: [el.assetId] } } as Partial<Element>);
     else if (el.kind === "image" && !el.choiceSlot) update(id, { choiceSlot: { label: "Choose image", options: [el.storageKey] } } as Partial<Element>);
-    setSelectedId(id);
+    selectId(id);
   };
 
   // Contextual floating-toolbar actions (spec §6.4).
@@ -167,7 +219,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     else if (action === "lock") { const el = elements.find((e) => e.id === id); if (el) update(id, { locked: !el.locked }); }
   };
 
-  // Keyboard shortcuts (spec §6.5). Delete is handled inside the canvas.
+  // Keyboard shortcuts (spec §6.5).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? "");
@@ -176,21 +228,22 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       if (mod && k === "z") { e.preventDefault(); e.shiftKey ? hist.redo() : hist.undo(); return; }
       if (mod && k === "y") { e.preventDefault(); hist.redo(); return; }
       if (typing) return;
-      if (mod && k === "d" && selectedId) { e.preventDefault(); duplicate(selectedId); return; }
-      if (k === "escape") { setSelectedId(null); return; }
-      if (selectedId && placement && e.key.startsWith("Arrow")) {
+      if (mod && k === "a") { e.preventDefault(); setSelectedIds(elements.filter((el) => el.placement === active).map((el) => el.id)); return; }
+      if (mod && k === "d" && selectedIds.length) { e.preventDefault(); duplicateSel(); return; }
+      if (k === "escape") { clearSel(); return; }
+      if (selectedIds.length && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); removeSel(); return; }
+      if (selectedIds.length && placement && e.key.startsWith("Arrow")) {
         e.preventDefault();
         const base = Math.max(1, Math.round(placement.printSpec.widthPx * 0.003)) * (e.shiftKey ? 10 : 1);
         const dx = e.key === "ArrowLeft" ? -base : e.key === "ArrowRight" ? base : 0;
         const dy = e.key === "ArrowUp" ? -base : e.key === "ArrowDown" ? base : 0;
-        hist.snapshot(`nudge:${selectedId}`);
-        hist.set((els) => els.map((el) => (el.id === selectedId ? ({ ...el, rect: { ...el.rect, x: el.rect.x + dx, y: el.rect.y + dy } } as Element) : el)));
+        nudgeSel(dx, dy);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, elements, placement]);
+  }, [selectedIds, elements, placement, active]);
 
   const save = async () => {
     if (!product) return;
@@ -237,7 +290,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
         <strong className="cname">{product.name}</strong>
         <div className="placement-tabs">
           {placements.map((pl) => (
-            <button key={pl.placement} data-on={pl.placement === active} onClick={() => { setActive(pl.placement); setSelectedId(null); }}>
+            <button key={pl.placement} data-on={pl.placement === active} onClick={() => { setActive(pl.placement); clearSel(); }}>
               {pl.placement}{countFor(pl.placement) > 0 && <span className="badge">{countFor(pl.placement)}</span>}
             </button>
           ))}
@@ -282,8 +335,8 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           <span className="eyebrow" style={{ marginTop: 14 }}>Layers</span>
           <ul className="layers">
             {[...elements].filter((e) => e.placement === active).sort((a, b) => b.z - a.z).map((el) => (
-              <li key={el.id} data-on={el.id === selectedId}>
-                <button className="lname" onClick={() => setSelectedId(el.id)}>{elementLabel(el)}</button>
+              <li key={el.id} data-on={selectedIds.includes(el.id)}>
+                <button className="lname" onClick={(e) => selectOne(el.id, e.shiftKey)}>{elementLabel(el)}</button>
                 <button className="mini" title="Up" onClick={() => reorder(el.id, 1)}><Icon name="chevron-up" size={15} /></button>
                 <button className="mini" title="Down" onClick={() => reorder(el.id, -1)}><Icon name="chevron-down" size={15} /></button>
                 <button className="mini" data-on={el.locked || undefined} title={el.locked ? "Unlock" : "Lock"} onClick={() => update(el.id, { locked: !el.locked })}><Icon name={el.locked ? "lock" : "unlock"} size={14} /></button>
@@ -302,26 +355,31 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
         </aside>
 
         <main className="stage-wrap">
-          {selected && (
+          {selectedIds.length > 0 && (
             <div className="align-bar">
-              <span className="eyebrow">Align</span>
+              <span className="eyebrow">{selectedIds.length > 1 ? `${selectedIds.length} selected · align` : "Align"}</span>
               <button className="mini" title="Left" onClick={() => align("left")}><Icon name="align-left" size={15} /></button>
               <button className="mini" title="H-center" onClick={() => align("hcenter")}><Icon name="move-horizontal" size={15} /></button>
               <button className="mini" title="Right" onClick={() => align("right")}><Icon name="align-right" size={15} /></button>
               <button className="mini" title="Top" onClick={() => align("top")}><Icon name="arrow-up-line" size={15} /></button>
               <button className="mini" title="V-center" onClick={() => align("vcenter")}><Icon name="move-vertical" size={15} /></button>
               <button className="mini" title="Bottom" onClick={() => align("bottom")}><Icon name="arrow-down-line" size={15} /></button>
+              {selectedIds.length > 2 && <>
+                <span className="align-sep" />
+                <button className="mini" title="Distribute horizontally" onClick={() => distribute("h")}><Icon name="move-horizontal" size={15} /></button>
+                <button className="mini" title="Distribute vertically" onClick={() => distribute("v")}><Icon name="move-vertical" size={15} /></button>
+              </>}
             </div>
           )}
           <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
-            mode="author" selectedId={selectedId} onSelect={setSelectedId}
-            onChange={canvasChange} onTransformStart={() => hist.snapshot()} onAction={onAction} onRemove={remove} />
-          <p className="hint">Anything outside the dashed print area is not printed. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
+            mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={setSelectedIds}
+            onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} />
+          <p className="hint">Anything outside the light area isn't printed. Shift-click or drag a box to select several. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
         </main>
 
         <aside className="props">
           <span className="eyebrow">Properties</span>
-          {!selected && <p className="hint">Select an element to edit it.</p>}
+          {!selected && <p className="hint">{selectedIds.length > 1 ? `${selectedIds.length} elements selected — align, distribute, move or delete them together.` : "Select an element to edit it."}</p>}
           {selected?.kind === "text" && <TextProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "graphic" && <GraphicProps el={selected} parts={graphicById(selected.assetId)?.recolorParts ?? []} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "image" && <ImageProps el={selected} onChange={(p) => update(selected.id, p)}
@@ -334,7 +392,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           {selected?.kind === "pattern" && <PatternProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "background" && <BackgroundProps el={selected} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
 
-          <CustomerFills slots={slots} onSelect={setSelectedId} />
+          <CustomerFills slots={slots} onSelect={selectId} />
 
           <div className="pgroup">
             <span className="eyebrow">Colors offered to customers</span>
