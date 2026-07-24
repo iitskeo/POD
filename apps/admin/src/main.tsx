@@ -4,6 +4,7 @@ import "@abbiss/preview-engine/src/tokens.css";
 import "./styles.css";
 import { App } from "./App";
 
+// Build/deploy pipeline smoke test — no functional change.
 document.documentElement.classList.add("theme-dark");
 
 createRoot(document.getElementById("root")!).render(
