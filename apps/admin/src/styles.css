@@ -261,6 +261,12 @@ input[type="color"] { padding: 3px; height: 34px; }
 .zoom-lvl { min-width: 54px; background: none; border: 0; color: var(--text-1); font-family: var(--mono); font-size: var(--t-12); cursor: pointer; padding: 5px 8px; border-radius: 999px; }
 .zoom-lvl:hover { background: var(--elev-2); }
 
+/* Rulers & soft grid (spec §5, P1). */
+.grid-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; background-image: linear-gradient(to right, rgba(127, 127, 127, 0.28) 1px, transparent 1px), linear-gradient(to bottom, rgba(127, 127, 127, 0.28) 1px, transparent 1px); background-size: 10% 10%; }
+.ruler { position: absolute; font-family: var(--mono); font-size: 9px; color: var(--signal); background: color-mix(in srgb, var(--bg) 68%, transparent); padding: 0 3px; border-radius: 3px; pointer-events: none; z-index: 3; white-space: nowrap; transform-origin: center; }
+.ruler.rx { top: 2px; }
+.ruler.ry { left: 2px; }
+
 /* Marquee rubber-band + guide lines (spec §6.1/§6.3). */
 .marquee { position: absolute; border: 1px solid var(--signal); background: color-mix(in srgb, var(--signal) 12%, transparent); pointer-events: none; z-index: 3; }
 .align-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--line); }

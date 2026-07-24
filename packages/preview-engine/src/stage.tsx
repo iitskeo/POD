@@ -112,6 +112,7 @@ export function PlacementStage({
   const [fit, setFit] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const [showGrid, setShowGrid] = useState(false);
   const panRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
   const viewRef = useRef({ zoom, pan });
   useEffect(() => { viewRef.current = { zoom, pan }; }, [zoom, pan]);
@@ -221,8 +222,10 @@ export function PlacementStage({
       if (drag.mode === "move") {
         const moved = { ...drag.rect, x: Math.round(drag.rect.x + dx), y: Math.round(drag.rect.y + dy) };
         const os = others([drag.id]);
-        const bx = snapAxis([moved.x, moved.x + moved.w / 2, moved.x + moved.w], [0, W / 2, W, ...os.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])], thr);
-        const by = snapAxis([moved.y, moved.y + moved.h / 2, moved.y + moved.h], [0, H / 2, H, ...os.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])], thr);
+        const gX = showGrid ? Array.from({ length: 11 }, (_, i) => (i * W) / 10) : [];
+        const gY = showGrid ? Array.from({ length: 11 }, (_, i) => (i * H) / 10) : [];
+        const bx = snapAxis([moved.x, moved.x + moved.w / 2, moved.x + moved.w], [0, W / 2, W, ...gX, ...os.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])], thr);
+        const by = snapAxis([moved.y, moved.y + moved.h / 2, moved.y + moved.h], [0, H / 2, H, ...gY, ...os.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])], thr);
         if (bx) moved.x += bx.delta;
         if (by) moved.y += by.delta;
         setGuides({ x: bx ? [bx.line] : [], y: by ? [by.line] : [] });
@@ -254,7 +257,7 @@ export function PlacementStage({
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-  }, [drag, elements, onChange, onChangeMany, zoom]);
+  }, [drag, elements, onChange, onChangeMany, zoom, showGrid]);
 
   const startPan = (e: ReactPointerEvent) => {
     e.preventDefault();
@@ -330,6 +333,13 @@ export function PlacementStage({
     >
       <div className="print-area" style={{ left: `${area.left * 100}%`, top: `${area.top * 100}%`, width: `${area.width * 100}%`, height: `${area.height * 100}%` }}>
         <canvas ref={canvasRef} />
+        {authoring && showGrid && (
+          <>
+            <div className="grid-overlay" />
+            {[0, 25, 50, 75, 100].map((p) => <span key={`rx${p}`} className="ruler rx" style={{ left: `${p}%`, transform: `translateX(-50%) scale(${cs})` }}>{Math.round((p / 100) * W)}</span>)}
+            {[0, 25, 50, 75, 100].map((p) => <span key={`ry${p}`} className="ruler ry" style={{ top: `${p}%`, transform: `translateY(-50%) scale(${cs})` }}>{Math.round((p / 100) * H)}</span>)}
+          </>
+        )}
         {authoring && guides.x.map((gx, i) => <span key={`gx${i}`} className="guide gx" style={{ left: `${(gx / W) * 100}%` }} />)}
         {authoring && guides.y.map((gy, i) => <span key={`gy${i}`} className="guide gy" style={{ top: `${(gy / H) * 100}%` }} />)}
         {authoring && spacing.map((s, i) => (
@@ -429,6 +439,7 @@ export function PlacementStage({
         <button className="zoom-lvl" title="Fit to screen" onClick={fitView}>{Math.round((zoom / fit) * 100)}%</button>
         <button className="mini" title="Zoom in" onClick={() => zoomTo(zoom * 1.2)}><Icon name="zoom-in" size={15} /></button>
         <button className="mini" title="Fit to screen" onClick={fitView}><Icon name="maximize" size={15} /></button>
+        <button className="mini" data-on={showGrid || undefined} title="Rulers & grid" onClick={() => setShowGrid((g) => !g)}><Icon name="ruler" size={15} /></button>
       </div>
     </div>
   );

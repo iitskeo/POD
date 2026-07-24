@@ -601,11 +601,13 @@ function GraphicsPanel({ graphics, onAdd, onUpload }: { graphics: Graphic[]; onA
   );
 }
 
-/** The searchable provided library (Iconify + shapes), spec §4. */
+/** The searchable provided library (Iconify + shapes), spec §4/§8, with recently-used (§7). */
 function LibrarySearch({ onPick }: { onPick: (ref: IconRef) => void }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<IconRef[]>([]);
   const [busy, setBusy] = useState(false);
+  const [recent, setRecent] = useState<IconRef[]>(() => getList("recent.icons").map((s) => { try { return JSON.parse(s) as IconRef; } catch { return null; } }).filter((r): r is IconRef => !!r));
+  const pick = (ref: IconRef) => { setRecent(pushRecent("recent.icons", JSON.stringify(ref)).map((s) => JSON.parse(s) as IconRef)); onPick(ref); };
 
   useEffect(() => {
     const term = q.trim();
@@ -618,21 +620,24 @@ function LibrarySearch({ onPick }: { onPick: (ref: IconRef) => void }) {
     return () => { stale = true; clearTimeout(t); };
   }, [q]);
 
+  const grid = (refs: IconRef[]) => (
+    <div className="asset-grid lib-grid">
+      {refs.map((ref) => (
+        <button key={ref.id} className={`asset-btn${ref.colored ? " colored" : ""}`} title={ref.name} onClick={() => pick(ref)}>
+          <img src={iconThumbUrl(ref)} alt={ref.name} loading="lazy" />
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="library">
-      <span className="eyebrow">Shapes & graphics library</span>
+      <span className="eyebrow">Shapes & icons library</span>
       <input className="lib-search" placeholder="Search icons (car, star, leaf…)" value={q} onChange={(e) => setQ(e.target.value)} />
       {busy && <p className="hint">Searching…</p>}
-      {results.length > 0 && (
-        <div className="asset-grid lib-grid">
-          {results.map((ref) => (
-            <button key={ref.id} className={`asset-btn${ref.colored ? " colored" : ""}`} title={ref.name} onClick={() => onPick(ref)}>
-              <img src={iconThumbUrl(ref)} alt={ref.name} loading="lazy" />
-            </button>
-          ))}
-        </div>
-      )}
+      {results.length > 0 && grid(results)}
       {q && !busy && results.length === 0 && <p className="hint">No matches in the provided sets.</p>}
+      {!q && recent.length > 0 && <><span className="eyebrow sub">Recently used</span>{grid(recent)}</>}
       {!q && <p className="hint">{ICONIFY_SETS.length} open icon sets · type to search</p>}
     </div>
   );
