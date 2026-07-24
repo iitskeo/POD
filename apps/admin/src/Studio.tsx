@@ -1,14 +1,17 @@
 import {
   PlacementStage, SEED_ASSETS, SHAPE_ASSETS, ICONIFY_SETS, searchIconify, iconThumbUrl, fetchIconSvg,
-  makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf,
+  makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf, Icon,
   type Align, type Asset, type BackgroundElement, type Element, type GraphicElement, type IconRef,
   type ImageElement, type PatternElement, type Placement, type Product, type Rect, type Slot,
   type SlotValues, type TextElement,
 } from "@abbiss/preview-engine";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { api } from "./api";
+import { useHistory } from "./history";
+import { FontPicker } from "./FontPicker";
+import { ColorField } from "./ColorField";
+import { getList, pushRecent, toggleFav } from "./prefs";
 
-const FONTS = ["Space Grotesk", "Inter", "IBM Plex Mono", "Arial", "Georgia", "Impact"];
 const COLORS = ["#0A0A0A", "#FFFFFF", "#FF5A1F", "#161616", "#F5F5F0", "#1D4ED8", "#DC2626", "#16A34A"];
 const PATTERNS: PatternElement["type"][] = ["half_drop", "block", "brick", "reflect", "line_h", "line_v"];
 
@@ -18,15 +21,32 @@ interface Graphic { id: string; name: string; aspect: number; recolorParts: stri
 export function Studio({ productId, onBack }: { productId: string; onBack: () => void }) {
   const resolver = useMemo(() => makeResolver(api), []);
   const [product, setProduct] = useState<Product | null>(null);
-  const [elements, setElements] = useState<Element[]>([]);
+  const hist = useHistory([]);
+  const elements = hist.elements;
   const [values, setValues] = useState<SlotValues>({});
   const [active, setActive] = useState("");
   const [variantId, setVariantId] = useState<number | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectId = (id: string) => setSelectedIds([id]);
+  const clearSel = () => setSelectedIds([]);
+  const selectOne = (id: string | null, additive?: boolean) => {
+    if (id == null) { setSelectedIds([]); return; }
+    setSelectedIds((cur) => (additive ? (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]) : [id]));
+  };
   const [status, setStatus] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quick, setQuick] = useState<{ id: string; name: string; elements: Element[] }[]>([]);
   const [offered, setOffered] = useState<string[] | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [toast, setToast] = useState<{ msg: string; action?: { label: string; fn: () => void } } | null>(null);
+  const [coachOff, setCoachOff] = useState(() => getList("dismissed").includes("coach.canvas"));
+  const toastTimer = useRef<number>(0);
+  const loadedRef = useRef(false);
+  const notify = (msg: string, action?: { label: string; fn: () => void }) => {
+    setToast({ msg, action });
+    clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 4500);
+  };
 
   useEffect(() => {
     (async () => {
@@ -35,7 +55,8 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       setActive(p.placements[0]?.placement ?? "");
       setVariantId(p.externalVariantId ? Number(p.externalVariantId) : p.variants[0]?.id ?? null);
       setOffered(p.offeredVariantColors);
-      if (d) setElements(d.elements);
+      if (d) hist.reset(d.elements);
+      loadedRef.current = true;
     })().catch((e) => setStatus(String(e.message ?? e)));
     api.listAssets().then(setAssets).catch(() => {});
     api.listQuickDesigns().then(setQuick).catch(() => {});
@@ -60,11 +81,12 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     return vt ?? product.placements;
   }, [product, variantId]);
   const placement = placements.find((p) => p.placement === active) ?? placements[0];
+  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
   const selected = elements.find((e) => e.id === selectedId) ?? null;
 
   const update = (id: string, patch: Partial<Element>) =>
-    setElements((els) => els.map((e) => (e.id === id ? ({ ...e, ...patch } as Element) : e)));
-  const remove = (id: string) => { setElements((els) => els.filter((e) => e.id !== id)); setSelectedId(null); };
+    hist.commit((els) => els.map((e) => (e.id === id ? ({ ...e, ...patch } as Element) : e)), `prop:${id}`);
+  const remove = (id: string) => { hist.commit((els) => els.filter((e) => e.id !== id)); clearSel(); notify("Element deleted", { label: "Undo", fn: hist.undo }); };
   const uid = () => crypto.randomUUID().slice(0, 8);
   const nextZ = () => Math.max(0, ...elements.map((e) => e.z)) + 1;
   const centerRect = (w: number, h: number): Rect => {
@@ -79,14 +101,19 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       z: nextZ(), content: "Your text", font: "Space Grotesk", color: "#0A0A0A", align: "center",
       maxLines: 2, minSizeFrac: 0.05, maxChars: 20, editable: false,
     };
-    setElements((e) => [...e, el]); setSelectedId(el.id);
+    hist.commit((e) => [...e, el]); selectId(el.id);
+  };
+  const addGraphicAt = (g: Graphic, cx: number, cy: number) => {
+    const sp = placement.printSpec;
+    const h = Math.round(sp.heightPx * 0.3), w = Math.round(h * g.aspect);
+    const el: GraphicElement = { id: uid(), kind: "graphic", placement: active, rect: { x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), w, h }, z: nextZ(), assetId: g.id };
+    hist.commit((e) => [...e, el]); selectId(el.id);
   };
   const addGraphic = (g: Graphic) => {
     const sp = placement.printSpec;
-    const h = Math.round(sp.heightPx * 0.3), w = Math.round(h * g.aspect);
-    const el: GraphicElement = { id: uid(), kind: "graphic", placement: active, rect: centerRect(w, h), z: nextZ(), assetId: g.id };
-    setElements((e) => [...e, el]); setSelectedId(el.id);
+    addGraphicAt(g, sp.widthPx / 2, sp.heightPx / 2);
   };
+  const onDropAsset = (id: string, pt: { x: number; y: number }) => { const g = graphics.find((x) => x.id === id); if (g) addGraphicAt(g, pt.x, pt.y); };
   const addUpload = async (file: File) => {
     setStatus("Uploading…");
     try {
@@ -94,7 +121,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       const sp = placement.printSpec;
       const h = Math.round(sp.heightPx * 0.4), w = Math.round(h * (aspect || 1));
       const el: ImageElement = { id: uid(), kind: "image", placement: active, rect: centerRect(w, h), z: nextZ(), storageKey: uploadId, aspect: aspect || 1 };
-      setElements((e) => [...e, el]); setSelectedId(el.id); setStatus("");
+      hist.commit((e) => [...e, el]); selectId(el.id); setStatus("");
     } catch (e) { setStatus(`Upload failed: ${e instanceof Error ? e.message : e}`); }
   };
   const addAssetFile = async (file: File) => {
@@ -116,10 +143,10 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   };
   const addBackground = () => {
     const el: BackgroundElement = { id: uid(), kind: "background", placement: active, rect: { x: 0, y: 0, w: placement.printSpec.widthPx, h: placement.printSpec.heightPx }, z: 0, fill: { color: "#FF5A1F" } };
-    setElements((e) => [el, ...e.map((x) => ({ ...x, z: x.z + 1 }))]); setSelectedId(el.id);
+    hist.commit((e) => [el, ...e.map((x) => ({ ...x, z: x.z + 1 }))]); selectId(el.id);
   };
 
-  const reorder = (id: string, dir: -1 | 1) => setElements((els) => {
+  const reorder = (id: string, dir: -1 | 1) => hist.commit((els) => {
     const same = els.filter((e) => e.placement === active).sort((a, b) => a.z - b.z);
     const i = same.findIndex((e) => e.id === id); const j = i + dir;
     if (i < 0 || j < 0 || j >= same.length) return els;
@@ -129,29 +156,159 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const duplicate = (id: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
     const copy = { ...el, id: uid(), z: nextZ(), rect: { ...el.rect, x: el.rect.x + 40, y: el.rect.y + 40 } } as Element;
-    setElements((e) => [...e, copy]); setSelectedId(copy.id);
+    hist.commit((e) => [...e, copy]); selectId(copy.id);
   };
   const duplicateTo = (id: string, target: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
     const copy = { ...el, id: uid(), placement: target } as Element;
-    setElements((e) => [...e, copy]);
+    hist.commit((e) => [...e, copy]);
   };
 
+  // Align: one element snaps to the canvas; multiple align to the selection's bounding box.
   const align = (a: Align) => {
-    if (!selected) return;
-    update(selected.id, { rect: alignRect(selected.rect, a, placement.printSpec.widthPx, placement.printSpec.heightPx) });
+    const sel = elements.filter((e) => selectedIds.includes(e.id));
+    if (!sel.length) return;
+    if (sel.length === 1) { update(sel[0].id, { rect: alignRect(sel[0].rect, a, placement.printSpec.widthPx, placement.printSpec.heightPx) }); return; }
+    const bx = Math.min(...sel.map((e) => e.rect.x)), by = Math.min(...sel.map((e) => e.rect.y));
+    const br = Math.max(...sel.map((e) => e.rect.x + e.rect.w)), bb = Math.max(...sel.map((e) => e.rect.y + e.rect.h));
+    hist.commit((els) => els.map((e) => {
+      if (!selectedIds.includes(e.id)) return e;
+      const r = { ...e.rect };
+      if (a === "left") r.x = bx; else if (a === "right") r.x = br - r.w;
+      else if (a === "hcenter") r.x = Math.round((bx + br) / 2 - r.w / 2);
+      else if (a === "top") r.y = by; else if (a === "bottom") r.y = bb - r.h;
+      else if (a === "vcenter") r.y = Math.round((by + bb) / 2 - r.h / 2);
+      return { ...e, rect: r };
+    }));
+  };
+  // Distribute selected elements to equal spacing between the outermost two (needs 3+).
+  const distribute = (axis: "h" | "v") => {
+    const sel = elements.filter((e) => selectedIds.includes(e.id));
+    if (sel.length < 3) return;
+    const k: keyof Rect = axis === "h" ? "x" : "y";
+    const sz: keyof Rect = axis === "h" ? "w" : "h";
+    const sorted = [...sel].sort((a, b) => (a.rect[k] + a.rect[sz] / 2) - (b.rect[k] + b.rect[sz] / 2));
+    const c0 = sorted[0].rect[k] + sorted[0].rect[sz] / 2;
+    const c1 = sorted[sorted.length - 1].rect[k] + sorted[sorted.length - 1].rect[sz] / 2;
+    const step = (c1 - c0) / (sorted.length - 1);
+    const target: Record<string, number> = {};
+    sorted.forEach((e, i) => { target[e.id] = c0 + step * i; });
+    hist.commit((els) => els.map((e) => {
+      if (target[e.id] === undefined) return e;
+      const r = { ...e.rect }; r[k] = Math.round(target[e.id] - r[sz] / 2);
+      return { ...e, rect: r };
+    }));
   };
 
-  const save = async () => {
+  // Live transforms from the canvas (no history until the gesture starts).
+  const canvasChange = (id: string, rect: Rect, rotation: number) =>
+    hist.set((els) => els.map((e) => (e.id === id ? ({ ...e, rect, rotation } as Element) : e)));
+  const canvasChangeMany = (updates: { id: string; rect: Rect }[]) =>
+    hist.set((els) => els.map((e) => { const u = updates.find((x) => x.id === e.id); return u ? ({ ...e, rect: u.rect } as Element) : e; }));
+
+  // Selection-wide actions (spec §6.5/§6.6).
+  const removeSel = () => {
+    if (!selectedIds.length) return;
+    const n = selectedIds.length;
+    hist.commit((els) => els.filter((e) => !selectedIds.includes(e.id))); clearSel();
+    notify(n === 1 ? "Element deleted" : `${n} elements deleted`, { label: "Undo", fn: hist.undo });
+  };
+  const duplicateSel = () => {
+    if (!selectedIds.length) return;
+    const copies = elements.filter((e) => selectedIds.includes(e.id)).map((e, i) => ({ ...e, id: uid(), z: nextZ() + i, rect: { ...e.rect, x: e.rect.x + 40, y: e.rect.y + 40 } } as Element));
+    hist.commit((e) => [...e, ...copies]); setSelectedIds(copies.map((c) => c.id));
+  };
+  const nudgeSel = (dx: number, dy: number) => {
+    hist.snapshot(`nudge:${selectedIds.join(",")}`);
+    hist.set((els) => els.map((el) => (selectedIds.includes(el.id) ? ({ ...el, rect: { ...el.rect, x: el.rect.x + dx, y: el.rect.y + dy } } as Element) : el)));
+  };
+
+  // One-gesture slot creation (spec §6.4 / §12): make the element customer-editable.
+  const makeSlot = (id: string) => {
+    const el = elements.find((e) => e.id === id); if (!el) return;
+    if (el.kind === "text") update(id, { editable: true, textLabel: el.textLabel ?? "Your text" } as Partial<Element>);
+    else if (el.kind === "graphic" && !el.choiceSlot) update(id, { choiceSlot: { label: "Choose image", options: [el.assetId] } } as Partial<Element>);
+    else if (el.kind === "image" && !el.choiceSlot) update(id, { choiceSlot: { label: "Choose image", options: [el.storageKey] } } as Partial<Element>);
+    selectId(id);
+  };
+
+  // Contextual floating-toolbar actions (spec §6.4).
+  const onAction = (action: string, id: string) => {
+    if (action === "duplicate") duplicate(id);
+    else if (action === "delete") remove(id);
+    else if (action === "forward") reorder(id, 1);
+    else if (action === "back") reorder(id, -1);
+    else if (action === "slot") makeSlot(id);
+    else if (action === "lock") { const el = elements.find((e) => e.id === id); if (el) update(id, { locked: !el.locked }); }
+  };
+
+  // Keyboard shortcuts (spec §6.5).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? "");
+      const mod = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+      if (mod && k === "z") { e.preventDefault(); e.shiftKey ? hist.redo() : hist.undo(); return; }
+      if (mod && k === "y") { e.preventDefault(); hist.redo(); return; }
+      if (typing) return;
+      if (mod && k === "a") { e.preventDefault(); setSelectedIds(elements.filter((el) => el.placement === active).map((el) => el.id)); return; }
+      if (mod && k === "d" && selectedIds.length) { e.preventDefault(); duplicateSel(); return; }
+      if (k === "escape") { clearSel(); return; }
+      if (selectedIds.length && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); removeSel(); return; }
+      if (selectedIds.length && placement && e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        const base = Math.max(1, Math.round(placement.printSpec.widthPx * 0.003)) * (e.shiftKey ? 10 : 1);
+        const dx = e.key === "ArrowLeft" ? -base : e.key === "ArrowRight" ? base : 0;
+        const dy = e.key === "ArrowUp" ? -base : e.key === "ArrowDown" ? base : 0;
+        nudgeSel(dx, dy);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds, elements, placement, active]);
+
+  const persist = async () => {
     if (!product) return;
-    setStatus("Saving…");
+    setSaveState("saving");
     try {
       await api.saveDesign({ id: `design-${productId}`, productId, name: product.name, status: product.status ?? "draft", elements });
       const up = await api.patchProduct(productId, { offeredVariantColors: offered });
       setProduct(up);
-      setStatus("Saved");
-    } catch (e) { setStatus(`Error: ${e instanceof Error ? e.message : e}`); }
+      setSaveState("saved");
+    } catch (e) { setSaveState("error"); setStatus(`Error: ${e instanceof Error ? e.message : e}`); }
   };
+  // Autosave (spec §14): debounce changes; the manual Save button stays for reassurance.
+  useEffect(() => {
+    if (!loadedRef.current || !product) return;
+    const t = setTimeout(() => { persist(); }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements, offered]);
+
+  // Start-from-template seeds (spec §13). Fully editable once applied.
+  const TEMPLATES = [
+    { id: "statement", name: "Big statement" },
+    { id: "stacked", name: "Stacked headline" },
+    { id: "sticker", name: "Sticker pop" },
+  ];
+  const applyTemplate = (id: string) => {
+    const sp = placement.printSpec;
+    const mk = (p: Partial<TextElement>): TextElement => ({
+      id: uid(), kind: "text", placement: active, z: nextZ(), content: "Text", font: "Space Grotesk",
+      color: "#0A0A0A", align: "center", maxLines: 2, minSizeFrac: 0.05, maxChars: 20, editable: false,
+      rect: centerRect(Math.round(sp.widthPx * 0.75), Math.round(sp.heightPx * 0.18)), ...p,
+    });
+    let els: Element[] = [];
+    if (id === "statement") els = [mk({ content: "BOLD", font: "Anton", rect: centerRect(Math.round(sp.widthPx * 0.82), Math.round(sp.heightPx * 0.22)) })];
+    else if (id === "stacked") els = [
+      mk({ content: "HEADLINE", font: "Bebas Neue", rect: { x: Math.round(sp.widthPx * 0.12), y: Math.round(sp.heightPx * 0.34), w: Math.round(sp.widthPx * 0.76), h: Math.round(sp.heightPx * 0.16) } }),
+      mk({ content: "your subheading here", font: "Inter", rect: { x: Math.round(sp.widthPx * 0.18), y: Math.round(sp.heightPx * 0.52), w: Math.round(sp.widthPx * 0.64), h: Math.round(sp.heightPx * 0.08) } }),
+    ];
+    else els = [mk({ content: "NICE", font: "Righteous", outline: { color: "#FFFFFF", width: 16 }, shadow: { color: "#00000055", blur: 12, dx: 5, dy: 5 } })];
+    hist.commit((e) => [...e, ...els]); setSelectedIds(els.map((x) => x.id));
+  };
+  const dismissCoach = () => { toggleFav("dismissed", "coach.canvas"); setCoachOff(true); };
 
   const saveQuick = async () => {
     const els = elements.filter((e) => e.placement === active);
@@ -162,10 +319,10 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   };
   const applyQuick = (qd: { elements: Element[] }) => {
     const cloned = qd.elements.map((e) => ({ ...e, id: uid(), placement: active, z: nextZ() + e.z } as Element));
-    setElements((e) => [...e, ...cloned]);
+    hist.commit((e) => [...e, ...cloned]);
   };
 
-  if (!product || !placement) return <p className="hint pad">Loading…</p>;
+  if (!product || !placement) return <StudioSkeleton />;
   const countFor = (pl: string) => elements.filter((e) => e.placement === pl).length;
   const otherPlacements = placements.map((p) => p.placement).filter((p) => p !== active);
   const colors = product.variants.filter((v, i, a) => a.findIndex((x) => x.color === v.color) === i);
@@ -183,39 +340,43 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   return (
     <div className="studio">
       <div className="studio-bar">
-        <button className="btn" onClick={onBack}>← Create Products</button>
+        <button className="btn" onClick={onBack}><Icon name="arrow-left" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Create Products</button>
         <strong className="cname">{product.name}</strong>
         <div className="placement-tabs">
           {placements.map((pl) => (
-            <button key={pl.placement} data-on={pl.placement === active} onClick={() => { setActive(pl.placement); setSelectedId(null); }}>
+            <button key={pl.placement} data-on={pl.placement === active} onClick={() => { setActive(pl.placement); clearSel(); }}>
               {pl.placement}{countFor(pl.placement) > 0 && <span className="badge">{countFor(pl.placement)}</span>}
             </button>
           ))}
         </div>
         <div className="spacer" />
-        <select className="variant" value={variantId ?? ""} onChange={(e) => setVariantId(Number(e.target.value))} title="Garment color (preview)">
-          {colors.map((v) => <option key={v.id} value={v.id}>{v.color ?? `Variant ${v.id}`}</option>)}
-        </select>
-        <span className="hint">{status}</span>
-        <button className="cta" onClick={save}>Save</button>
+        <div className="garment-colors" title="Garment color">
+          {colors.map((v) => (
+            <button key={v.id} className="gsw" data-on={v.id === variantId}
+              style={{ background: v.colorCode ?? "#888" }}
+              title={v.color ?? `Variant ${v.id}`} onClick={() => setVariantId(v.id)} />
+          ))}
+        </div>
+        <div className="bar-group">
+          <button className="icon-btn" title="Undo (Cmd/Ctrl+Z)" disabled={!hist.canUndo} onClick={hist.undo}><Icon name="undo-2" size={17} /></button>
+          <button className="icon-btn" title="Redo (Shift+Cmd/Ctrl+Z)" disabled={!hist.canRedo} onClick={hist.redo}><Icon name="redo-2" size={17} /></button>
+        </div>
+        <span className="hint save-state" data-s={saveState}>{status || (saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "")}</span>
+        <button className="cta" onClick={persist}><Icon name="check" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Save</button>
       </div>
 
       <div className="studio-grid">
         <aside className="rail">
           <span className="eyebrow">Add</span>
-          <button className="btn wide" onClick={addText}>Text</button>
+          <button className="btn wide" onClick={addText}><Icon name="type" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Text</button>
           <label className="btn wide file">Upload image<input type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => e.target.files?.[0] && addUpload(e.target.files[0])} /></label>
-          <button className="btn wide" onClick={addBackground}>Background fill</button>
+          <button className="btn wide" onClick={addBackground}><Icon name="square" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Background fill</button>
 
           <LibrarySearch onPick={importIcon} />
 
-          <div className="row-between"><span className="eyebrow">Graphics</span>
-            <label className="mini file" title="Upload a graphic to your library">+<input type="file" accept="image/svg+xml,image/png" hidden onChange={(e) => e.target.files?.[0] && addAssetFile(e.target.files[0])} /></label></div>
-          <div className="asset-grid">
-            {graphics.map((g) => <button key={g.id} className="asset-btn" title={g.name} onClick={() => addGraphic(g)}><img src={g.thumb} alt={g.name} /></button>)}
-          </div>
+          <GraphicsPanel graphics={graphics} onAdd={addGraphic} onUpload={addAssetFile} />
 
-          <div className="row-between"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}>+</button></div>
+          <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
           <div className="quick-list">
             {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
             {quick.length === 0 && <p className="hint">None yet</p>}
@@ -224,19 +385,19 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           <span className="eyebrow" style={{ marginTop: 14 }}>Layers</span>
           <ul className="layers">
             {[...elements].filter((e) => e.placement === active).sort((a, b) => b.z - a.z).map((el) => (
-              <li key={el.id} data-on={el.id === selectedId}>
-                <button className="lname" onClick={() => setSelectedId(el.id)}>{elementLabel(el)}</button>
-                <button className="mini" title="Up" onClick={() => reorder(el.id, 1)}>↑</button>
-                <button className="mini" title="Down" onClick={() => reorder(el.id, -1)}>↓</button>
-                <button className="mini" title={el.locked ? "Unlock" : "Lock"} onClick={() => update(el.id, { locked: !el.locked })}>{el.locked ? "🔒" : "○"}</button>
-                <button className="mini" title={el.hidden ? "Show" : "Hide"} onClick={() => update(el.id, { hidden: !el.hidden })}>{el.hidden ? "◌" : "●"}</button>
-                <button className="mini" title="Duplicate" onClick={() => duplicate(el.id)}>⎘</button>
+              <li key={el.id} data-on={selectedIds.includes(el.id)}>
+                <button className="lname" onClick={(e) => selectOne(el.id, e.shiftKey)}>{elementLabel(el)}</button>
+                <button className="mini" title="Up" onClick={() => reorder(el.id, 1)}><Icon name="chevron-up" size={15} /></button>
+                <button className="mini" title="Down" onClick={() => reorder(el.id, -1)}><Icon name="chevron-down" size={15} /></button>
+                <button className="mini" data-on={el.locked || undefined} title={el.locked ? "Unlock" : "Lock"} onClick={() => update(el.id, { locked: !el.locked })}><Icon name={el.locked ? "lock" : "unlock"} size={14} /></button>
+                <button className="mini" title={el.hidden ? "Show" : "Hide"} onClick={() => update(el.id, { hidden: !el.hidden })}><Icon name={el.hidden ? "eye-off" : "eye"} size={14} /></button>
+                <button className="mini" title="Duplicate" onClick={() => duplicate(el.id)}><Icon name="copy" size={14} /></button>
                 {otherPlacements.length > 0 && (
                   <select className="dupsel" title="Duplicate to placement" value="" onChange={(e) => { if (e.target.value) duplicateTo(el.id, e.target.value); e.target.value = ""; }}>
-                    <option value="">→</option>{otherPlacements.map((p) => <option key={p} value={p}>{p}</option>)}
+                    <option value="">Copy to…</option>{otherPlacements.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 )}
-                <button className="mini" title="Delete" onClick={() => remove(el.id)}>×</button>
+                <button className="mini" title="Delete" onClick={() => remove(el.id)}><Icon name="trash" size={14} /></button>
               </li>
             ))}
             {countFor(active) === 0 && <li className="empty">No elements</li>}
@@ -244,26 +405,47 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
         </aside>
 
         <main className="stage-wrap">
-          {selected && (
+          {selectedIds.length > 0 && (
             <div className="align-bar">
-              <span className="eyebrow">Align</span>
-              <button className="mini" title="Left" onClick={() => align("left")}>⬅</button>
-              <button className="mini" title="H-center" onClick={() => align("hcenter")}>↔</button>
-              <button className="mini" title="Right" onClick={() => align("right")}>➡</button>
-              <button className="mini" title="Top" onClick={() => align("top")}>⬆</button>
-              <button className="mini" title="V-center" onClick={() => align("vcenter")}>↕</button>
-              <button className="mini" title="Bottom" onClick={() => align("bottom")}>⬇</button>
+              <span className="eyebrow">{selectedIds.length > 1 ? `${selectedIds.length} selected · align` : "Align"}</span>
+              <button className="mini" title="Left" onClick={() => align("left")}><Icon name="align-left" size={15} /></button>
+              <button className="mini" title="H-center" onClick={() => align("hcenter")}><Icon name="move-horizontal" size={15} /></button>
+              <button className="mini" title="Right" onClick={() => align("right")}><Icon name="align-right" size={15} /></button>
+              <button className="mini" title="Top" onClick={() => align("top")}><Icon name="arrow-up-line" size={15} /></button>
+              <button className="mini" title="V-center" onClick={() => align("vcenter")}><Icon name="move-vertical" size={15} /></button>
+              <button className="mini" title="Bottom" onClick={() => align("bottom")}><Icon name="arrow-down-line" size={15} /></button>
+              {selectedIds.length > 2 && <>
+                <span className="align-sep" />
+                <button className="mini" title="Distribute horizontally" onClick={() => distribute("h")}><Icon name="move-horizontal" size={15} /></button>
+                <button className="mini" title="Distribute vertically" onClick={() => distribute("v")}><Icon name="move-vertical" size={15} /></button>
+              </>}
             </div>
           )}
-          <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
-            mode="author" selectedId={selectedId} onSelect={setSelectedId}
-            onChange={(id, rect, rotation) => update(id, { rect, rotation })} onRemove={remove} />
-          <p className="hint">Anything outside the dashed print area is not printed. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
+          <div className="stage-stack">
+            <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
+              mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={setSelectedIds}
+              onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} onDropAsset={onDropAsset} />
+            {countFor(active) === 0 && (
+              <div className="canvas-empty">
+                <h3>Start designing “{active}”</h3>
+                <p className="hint">Pick a template to move fast, or start from a blank canvas.</p>
+                <div className="tpl-row">{TEMPLATES.map((t) => <button key={t.id} className="btn" onClick={() => applyTemplate(t.id)}>{t.name}</button>)}</div>
+                <button className="btn ghost" onClick={addText}>Start blank</button>
+              </div>
+            )}
+            {selected && !coachOff && (
+              <div className="coach">
+                <span>Drag a corner to resize · hold <b>Shift</b> to free-scale · drag a box on empty canvas to multi-select</span>
+                <button className="mini" title="Got it" onClick={dismissCoach}><Icon name="x" size={14} /></button>
+              </div>
+            )}
+          </div>
+          <p className="hint">Anything outside the light area isn't printed. Shift-click or drag a box to select several. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
         </main>
 
         <aside className="props">
           <span className="eyebrow">Properties</span>
-          {!selected && <p className="hint">Select an element to edit it.</p>}
+          {!selected && <p className="hint">{selectedIds.length > 1 ? `${selectedIds.length} elements selected — align, distribute, move or delete them together.` : "Select an element to edit it."}</p>}
           {selected?.kind === "text" && <TextProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "graphic" && <GraphicProps el={selected} parts={graphicById(selected.assetId)?.recolorParts ?? []} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "image" && <ImageProps el={selected} onChange={(p) => update(selected.id, p)}
@@ -276,7 +458,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           {selected?.kind === "pattern" && <PatternProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "background" && <BackgroundProps el={selected} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
 
-          <CustomerFills slots={slots} onSelect={setSelectedId} />
+          <CustomerFills slots={slots} onSelect={selectId} />
 
           <div className="pgroup">
             <span className="eyebrow">Colors offered to customers</span>
@@ -292,6 +474,61 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           </div>
         </aside>
       </div>
+
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast.msg}</span>
+          {toast.action && <button className="toast-action" onClick={() => { toast.action!.fn(); setToast(null); }}>{toast.action.label}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Loading skeleton for the studio (spec §14) — never a frozen empty frame. */
+function StudioSkeleton() {
+  return (
+    <div className="studio">
+      <div className="studio-bar"><span className="sk sk-line" style={{ width: 160 }} /><div className="spacer" /><span className="sk sk-line" style={{ width: 90 }} /></div>
+      <div className="studio-grid">
+        <aside className="rail">{Array.from({ length: 5 }).map((_, i) => <span key={i} className="sk sk-block" />)}</aside>
+        <main className="stage-wrap"><div className="sk sk-stage" /></main>
+        <aside className="props">{Array.from({ length: 4 }).map((_, i) => <span key={i} className="sk sk-block" />)}</aside>
+      </div>
+    </div>
+  );
+}
+
+/** Owner graphics: search, favorites, recents, drag-to-canvas (spec §7). */
+function GraphicsPanel({ graphics, onAdd, onUpload }: { graphics: Graphic[]; onAdd: (g: Graphic) => void; onUpload: (f: File) => void }) {
+  const [q, setQ] = useState("");
+  const [fav, setFav] = useState<string[]>(() => getList("fav.graphics"));
+  const [recent, setRecent] = useState<string[]>(() => getList("recent.graphics"));
+  const add = (g: Graphic) => { setRecent(pushRecent("recent.graphics", g.id)); onAdd(g); };
+  const star = (id: string, e: ReactMouseEvent) => { e.stopPropagation(); setFav(toggleFav("fav.graphics", id)); };
+  const byId = (id: string) => graphics.find((g) => g.id === id);
+  const term = q.trim().toLowerCase();
+  const filtered = term ? graphics.filter((g) => g.name.toLowerCase().includes(term)) : graphics;
+
+  const tile = (g: Graphic) => (
+    <div key={g.id} className="asset-cell">
+      <button className="asset-btn" title={g.name} draggable
+        onDragStart={(e) => { e.dataTransfer.setData("text/asset-id", g.id); e.dataTransfer.effectAllowed = "copy"; }}
+        onClick={() => add(g)}><img src={g.thumb} alt={g.name} /></button>
+      <button className="star mini" data-on={fav.includes(g.id) || undefined} title="Favorite" onClick={(e) => star(g.id, e)}><Icon name="star" size={12} /></button>
+    </div>
+  );
+
+  return (
+    <div className="library">
+      <div className="section-head"><span className="eyebrow">My graphics</span>
+        <label className="mini file" title="Upload a graphic to your library"><Icon name="plus" size={15} /><input type="file" accept="image/svg+xml,image/png" hidden onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} /></label></div>
+      <input className="lib-search" placeholder="Search graphics…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {!term && fav.length > 0 && <><span className="eyebrow sub">Favorites</span><div className="asset-grid">{fav.map(byId).filter((g): g is Graphic => !!g).map(tile)}</div></>}
+      {!term && recent.length > 0 && <><span className="eyebrow sub">Recent</span><div className="asset-grid">{recent.map(byId).filter((g): g is Graphic => !!g).map(tile)}</div></>}
+      {!term && (fav.length > 0 || recent.length > 0) && <span className="eyebrow sub">All</span>}
+      <div className="asset-grid">{filtered.map(tile)}</div>
+      {filtered.length === 0 && <p className="hint">No graphics match “{q}”.</p>}
     </div>
   );
 }
@@ -361,11 +598,17 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
   return (
     <div className="pgroup">
       <label className="field"><span className="hint">Text</span><input value={el.content} onChange={(e) => onChange({ content: e.target.value })} /></label>
-      <div className="field row">
-        <label><span className="hint">Font</span><select value={el.font} onChange={(e) => onChange({ font: e.target.value })}>{FONTS.map((f) => <option key={f}>{f}</option>)}</select></label>
-        <label><span className="hint">Align</span><select value={el.align} onChange={(e) => onChange({ align: e.target.value as TextElement["align"] })}><option>left</option><option>center</option><option>right</option></select></label>
+      <div className="field"><span className="hint">Font</span><FontPicker value={el.font} onChange={(font) => onChange({ font })} /></div>
+      <div className="field"><span className="hint">Align</span>
+        <div className="seg">
+          {(["left", "center", "right"] as const).map((a) => (
+            <button key={a} data-on={el.align === a} onClick={() => onChange({ align: a })}>
+              <Icon name={a === "left" ? "align-left" : a === "center" ? "align-center" : "align-right"} size={15} />
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="field"><span className="hint">Color</span><div className="swatches">{COLORS.map((c) => <button key={c} className="sw" data-on={el.color === c} style={{ background: c }} onClick={() => onChange({ color: c })} />)}</div></div>
+      <ColorField label="Color" value={el.color} palette={COLORS} onChange={(color) => onChange({ color })} />
       <div className="field row">
         <label><span className="hint">Letter spacing</span><input type="number" value={el.letterSpacing ?? 0} onChange={(e) => onChange({ letterSpacing: Number(e.target.value) })} /></label>
         <label><span className="hint">Arc °</span><input type="number" value={el.arc ?? 0} onChange={(e) => onChange({ arc: Number(e.target.value) })} /></label>
@@ -463,7 +706,7 @@ function ImageProps({ el, onChange, addOption, onPattern }: {
             {opts.map((id) => (
               <div key={id} className={`choice-tile on${el.storageKey === id ? " def" : ""}`}>
                 <button className="ct-img" title="Set as default" onClick={() => onChange({ storageKey: id })}><img src={thumb(id)} alt="" style={{ filter: "none" }} /></button>
-                {opts.length > 1 && <button className="ct-tick" title="Remove" onClick={() => { const next = opts.filter((o) => o !== id); onChange({ choiceSlot: { ...el.choiceSlot!, options: next }, storageKey: el.storageKey === id ? next[0] : el.storageKey }); }}>×</button>}
+                {opts.length > 1 && <button className="ct-tick" title="Remove" onClick={() => { const next = opts.filter((o) => o !== id); onChange({ choiceSlot: { ...el.choiceSlot!, options: next }, storageKey: el.storageKey === id ? next[0] : el.storageKey }); }}><Icon name="x" size={11} /></button>}
               </div>
             ))}
           </div>
@@ -488,7 +731,7 @@ function PatternProps({ el, onChange }: { el: PatternElement; onChange: (p: Part
 function BackgroundProps({ el, onChange }: { el: BackgroundElement; graphics: Graphic[]; onChange: (p: Partial<BackgroundElement>) => void }) {
   return (
     <div className="pgroup">
-      <div className="field"><span className="hint">Fill color</span><div className="swatches">{COLORS.map((c) => <button key={c} className="sw" data-on={el.fill.color === c} style={{ background: c }} onClick={() => onChange({ fill: { color: c } })} />)}</div></div>
+      <ColorField label="Fill color" value={el.fill.color} palette={COLORS} onChange={(color) => onChange({ fill: { color } })} />
     </div>
   );
 }

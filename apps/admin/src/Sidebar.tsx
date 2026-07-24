@@ -1,3 +1,5 @@
+import { Icon } from "@abbiss/preview-engine";
+
 export type Dest = "create" | "products";
 
 const STOREFRONT = import.meta.env.VITE_STOREFRONT_BASE ?? "http://localhost:5173";
@@ -11,17 +13,17 @@ export function Sidebar({ dest, onNavigate, onLogout }: {
       <div className="brand">Abbiss</div>
       <nav className="side-nav">
         <a className="side-link" href={STOREFRONT} target="_blank" rel="noreferrer">
-          <span className="si">↗</span> My Store
+          <span className="si"><Icon name="external-link" size={17} /></span> My Store
         </a>
         <button className="side-link" data-on={dest === "create"} onClick={() => onNavigate("create")}>
-          <span className="si">✎</span> Create Products
+          <span className="si"><Icon name="pen" size={17} /></span> Create Products
         </button>
         <button className="side-link" data-on={dest === "products"} onClick={() => onNavigate("products")}>
-          <span className="si">▦</span> My Products
+          <span className="si"><Icon name="grid" size={17} /></span> My Products
         </button>
       </nav>
       <div className="spacer" />
-      <button className="side-link muted" onClick={onLogout}>Log out</button>
+      <button className="side-link muted" onClick={onLogout}><span className="si"><Icon name="log-out" size={16} /></span> Log out</button>
     </aside>
   );
 }

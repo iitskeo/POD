@@ -8,3 +8,4 @@ export * from "./iconify";
 export * from "./api";
 export * from "./util";
 export * from "./stage";
+export * from "./icons";
