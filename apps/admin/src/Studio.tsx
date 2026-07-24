@@ -27,6 +27,9 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [active, setActive] = useState("");
   const [variantId, setVariantId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [dragLayer, setDragLayer] = useState<string | null>(null);
+  const [overLayer, setOverLayer] = useState<string | null>(null);
+  const [panel, setPanel] = useState<"add" | "library" | "graphics" | "templates">("add");
   const selectId = (id: string) => setSelectedIds([id]);
   const clearSel = () => setSelectedIds([]);
   const selectOne = (id: string | null, additive?: boolean) => {
@@ -153,6 +156,19 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     const zi = same[i].z, zj = same[j].z;
     return els.map((e) => e.id === same[i].id ? { ...e, z: zj } : e.id === same[j].id ? { ...e, z: zi } : e);
   });
+  // Drag-to-reorder: move one layer to another's slot and re-number z on this placement.
+  const reorderLayers = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const ordered = elements.filter((e) => e.placement === active).sort((a, b) => b.z - a.z);
+    const from = ordered.findIndex((e) => e.id === fromId), to = ordered.findIndex((e) => e.id === toId);
+    if (from < 0 || to < 0) return;
+    const next = [...ordered];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    const zById: Record<string, number> = {};
+    next.forEach((e, i) => { zById[e.id] = next.length - i; });
+    hist.commit((els) => els.map((e) => (zById[e.id] !== undefined ? { ...e, z: zById[e.id] } : e)));
+  };
   const duplicate = (id: string) => {
     const el = elements.find((e) => e.id === id); if (!el) return;
     const copy = { ...el, id: uid(), z: nextZ(), rect: { ...el.rect, x: el.rect.x + 40, y: el.rect.y + 40 } } as Element;
@@ -252,6 +268,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       if (mod && k === "y") { e.preventDefault(); hist.redo(); return; }
       if (typing) return;
       if (mod && k === "a") { e.preventDefault(); setSelectedIds(elements.filter((el) => el.placement === active).map((el) => el.id)); return; }
+      if (mod && (e.key === "]" || e.key === "[")) { e.preventDefault(); selectedIds.forEach((id) => reorder(id, e.key === "]" ? 1 : -1)); return; }
       if (mod && k === "d" && selectedIds.length) { e.preventDefault(); duplicateSel(); return; }
       if (k === "escape") { clearSel(); return; }
       if (selectedIds.length && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); removeSel(); return; }
@@ -366,29 +383,48 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       </div>
 
       <div className="studio-grid">
-        <aside className="rail">
-          <span className="eyebrow">Add</span>
-          <button className="btn wide" onClick={addText}><Icon name="type" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Text</button>
-          <label className="btn wide file">Upload image<input type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => e.target.files?.[0] && addUpload(e.target.files[0])} /></label>
-          <button className="btn wide" onClick={addBackground}><Icon name="square" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Background fill</button>
-
-          <LibrarySearch onPick={importIcon} />
-
-          <GraphicsPanel graphics={graphics} onAdd={addGraphic} onUpload={addAssetFile} />
-
-          <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
-          <div className="quick-list">
-            {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
-            {quick.length === 0 && <p className="hint">None yet</p>}
-          </div>
+        <aside className="rail-shell">
+          <nav className="rail-icons">
+            <button className="rail-ico" data-on={panel === "add"} title="Add" onClick={() => setPanel("add")}><Icon name="plus" size={19} /></button>
+            <button className="rail-ico" data-on={panel === "library"} title="Shapes & icons library" onClick={() => setPanel("library")}><Icon name="search" size={19} /></button>
+            <button className="rail-ico" data-on={panel === "graphics"} title="My graphics" onClick={() => setPanel("graphics")}><Icon name="image" size={19} /></button>
+            <button className="rail-ico" data-on={panel === "templates"} title="Templates & quick designs" onClick={() => setPanel("templates")}><Icon name="grid" size={19} /></button>
+          </nav>
+          <div className="rail-body">
+            <div className="rail-panel">
+              {panel === "add" && (
+                <>
+                  <span className="eyebrow">Add</span>
+                  <button className="btn wide" onClick={addText}><Icon name="type" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Text</button>
+                  <label className="btn wide file">Upload image<input type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => e.target.files?.[0] && addUpload(e.target.files[0])} /></label>
+                  <button className="btn wide" onClick={addBackground}><Icon name="square" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Background fill</button>
+                </>
+              )}
+              {panel === "library" && <LibrarySearch onPick={importIcon} />}
+              {panel === "graphics" && <GraphicsPanel graphics={graphics} onAdd={addGraphic} onUpload={addAssetFile} />}
+              {panel === "templates" && (
+                <>
+                  <span className="eyebrow">Start from a template</span>
+                  <div className="quick-list">{TEMPLATES.map((t) => <button key={t.id} className="btn wide sm" onClick={() => applyTemplate(t.id)}>{t.name}</button>)}</div>
+                  <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
+                  <div className="quick-list">
+                    {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
+                    {quick.length === 0 && <p className="hint">None yet</p>}
+                  </div>
+                </>
+              )}
+            </div>
 
           <span className="eyebrow" style={{ marginTop: 14 }}>Layers</span>
           <ul className="layers">
             {[...elements].filter((e) => e.placement === active).sort((a, b) => b.z - a.z).map((el) => (
-              <li key={el.id} data-on={selectedIds.includes(el.id)}>
+              <li key={el.id} data-on={selectedIds.includes(el.id)} data-over={overLayer === el.id || undefined} draggable
+                onDragStart={(e) => { setDragLayer(el.id); e.dataTransfer.effectAllowed = "move"; }}
+                onDragOver={(e) => { e.preventDefault(); if (dragLayer && overLayer !== el.id) setOverLayer(el.id); }}
+                onDrop={(e) => { e.preventDefault(); if (dragLayer) reorderLayers(dragLayer, el.id); setDragLayer(null); setOverLayer(null); }}
+                onDragEnd={() => { setDragLayer(null); setOverLayer(null); }}>
+                <span className="grip" title="Drag to reorder"><Icon name="grip" size={14} /></span>
                 <button className="lname" onClick={(e) => selectOne(el.id, e.shiftKey)}>{elementLabel(el)}</button>
-                <button className="mini" title="Up" onClick={() => reorder(el.id, 1)}><Icon name="chevron-up" size={15} /></button>
-                <button className="mini" title="Down" onClick={() => reorder(el.id, -1)}><Icon name="chevron-down" size={15} /></button>
                 <button className="mini" data-on={el.locked || undefined} title={el.locked ? "Unlock" : "Lock"} onClick={() => update(el.id, { locked: !el.locked })}><Icon name={el.locked ? "lock" : "unlock"} size={14} /></button>
                 <button className="mini" title={el.hidden ? "Show" : "Hide"} onClick={() => update(el.id, { hidden: !el.hidden })}><Icon name={el.hidden ? "eye-off" : "eye"} size={14} /></button>
                 <button className="mini" title="Duplicate" onClick={() => duplicate(el.id)}><Icon name="copy" size={14} /></button>
@@ -402,6 +438,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
             ))}
             {countFor(active) === 0 && <li className="empty">No elements</li>}
           </ul>
+          </div>
         </aside>
 
         <main className="stage-wrap">
@@ -608,9 +645,21 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
           ))}
         </div>
       </div>
+      <div className="field row">
+        <label><span className="hint">Weight</span><select value={el.weight ?? 700} onChange={(e) => onChange({ weight: Number(e.target.value) })}>
+          <option value={400}>Regular</option><option value={500}>Medium</option><option value={600}>Semibold</option><option value={700}>Bold</option><option value={800}>Extrabold</option>
+        </select></label>
+        <label><span className="hint">Case</span><select value={el.case ?? "none"} onChange={(e) => onChange({ case: e.target.value === "none" ? undefined : (e.target.value as TextElement["case"]) })}>
+          <option value="none">Aa Normal</option><option value="upper">UPPERCASE</option><option value="title">Title Case</option><option value="lower">lowercase</option>
+        </select></label>
+      </div>
       <ColorField label="Color" value={el.color} palette={COLORS} onChange={(color) => onChange({ color })} />
+      <TextEffectPresets el={el} onChange={onChange} />
       <div className="field row">
         <label><span className="hint">Letter spacing</span><input type="number" value={el.letterSpacing ?? 0} onChange={(e) => onChange({ letterSpacing: Number(e.target.value) })} /></label>
+        <label><span className="hint">Line height</span><input type="number" step="0.05" value={el.lineHeight ?? 1.15} onChange={(e) => onChange({ lineHeight: Number(e.target.value) })} /></label>
+      </div>
+      <div className="field row">
         <label><span className="hint">Arc °</span><input type="number" value={el.arc ?? 0} onChange={(e) => onChange({ arc: Number(e.target.value) })} /></label>
         <label><span className="hint">Max lines</span><input type="number" value={el.maxLines} onChange={(e) => onChange({ maxLines: Math.max(1, Number(e.target.value)) })} /></label>
       </div>
@@ -624,6 +673,33 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
       {el.editable && <div className="field row"><label><span className="hint">Label</span><input value={el.textLabel ?? ""} onChange={(e) => onChange({ textLabel: e.target.value })} /></label><label><span className="hint">Max chars</span><input type="number" value={el.maxChars} onChange={(e) => onChange({ maxChars: Number(e.target.value) })} /></label></div>}
       <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Text color", options: COLORS.slice(0, 4), default: el.color } : undefined })} /> Let the customer pick the text color</label>
       {el.colorSlot && <ColorSlotCfg options={el.colorSlot.options} def={el.colorSlot.default} onChange={(options, def) => onChange({ colorSlot: { ...el.colorSlot!, options, default: def } })} />}
+    </div>
+  );
+}
+
+/** One-click text-effect presets, sized to the element, then tweakable (spec §9.4). */
+function TextEffectPresets({ el, onChange }: { el: TextElement; onChange: (p: Partial<TextElement>) => void }) {
+  const h = el.rect.h;
+  const r = (frac: number, min: number) => Math.max(min, Math.round(h * frac));
+  const presets: { id: string; label: string; apply: Partial<TextElement> }[] = [
+    { id: "none", label: "None", apply: { outline: undefined, shadow: undefined } },
+    { id: "outline", label: "Outline", apply: { outline: { color: "#0A0A0A", width: r(0.03, 3) }, shadow: undefined } },
+    { id: "sticker", label: "Sticker", apply: { outline: { color: "#FFFFFF", width: r(0.07, 6) }, shadow: { color: "#00000040", blur: r(0.03, 4), dx: 0, dy: r(0.02, 2) } } },
+    { id: "shadow", label: "Shadow", apply: { outline: undefined, shadow: { color: "#00000066", blur: r(0.04, 4), dx: r(0.02, 2), dy: r(0.02, 2) } } },
+    { id: "glow", label: "Glow", apply: { outline: undefined, shadow: { color: "#FF5A1FAA", blur: r(0.09, 8), dx: 0, dy: 0 } } },
+  ];
+  const active = !el.outline && !el.shadow ? "none"
+    : el.outline && el.outline.color.toUpperCase() === "#FFFFFF" ? "sticker"
+      : el.outline ? "outline"
+        : el.shadow && el.shadow.dx === 0 && el.shadow.dy === 0 ? "glow" : "shadow";
+  return (
+    <div className="field">
+      <span className="hint">Effect</span>
+      <div className="preset-row">
+        {presets.map((p) => (
+          <button key={p.id} className="preset" data-on={active === p.id || undefined} onClick={() => onChange(p.apply)}>{p.label}</button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -39,7 +39,8 @@ type Drag =
   | { mode: "move"; id: string; sx: number; sy: number; rect: Rect; rot: number }
   | { mode: "resize"; id: string; sx: number; sy: number; rect: Rect; rot: number; handle: HandleId; aspect: number | null }
   | { mode: "rotate"; id: string; cx: number; cy: number; rect: Rect; start: number }
-  | { mode: "group"; ids: string[]; sx: number; sy: number; rects: Record<string, Rect> };
+  | { mode: "group"; ids: string[]; sx: number; sy: number; rects: Record<string, Rect> }
+  | { mode: "groupResize"; ids: string[]; sx: number; sy: number; rects: Record<string, Rect>; bbox: Rect; handle: HandleId };
 
 function snapAxis(anchors: number[], targets: number[], thr: number): { delta: number; line: number } | null {
   let best: { delta: number; line: number } | null = null;
@@ -48,6 +49,42 @@ function snapAxis(anchors: number[], targets: number[], thr: number): { delta: n
     if (Math.abs(d) <= thr && (!best || Math.abs(d) < Math.abs(best.delta))) best = { delta: d, line: t };
   }
   return best;
+}
+
+type Badge = { cx: number; cy: number; value: number };
+/** Detect equal spacing between the moving rect and its nearest neighbours on each axis. */
+function equalSpacing(m: Rect, os: Rect[], thr: number): { nx?: number; ny?: number; badgesX: Badge[]; badgesY: Badge[] } {
+  const badgesX: Badge[] = [], badgesY: Badge[] = [];
+  let nx: number | undefined, ny: number | undefined;
+  const oy = os.filter((o) => o.y < m.y + m.h && o.y + o.h > m.y);
+  const L = oy.filter((o) => o.x + o.w <= m.x + 1).sort((a, b) => (b.x + b.w) - (a.x + a.w))[0];
+  const R = oy.filter((o) => o.x >= m.x + m.w - 1).sort((a, b) => a.x - b.x)[0];
+  if (L && R) {
+    const inner = R.x - (L.x + L.w) - m.w;
+    if (inner > 0) {
+      const target = Math.round(L.x + L.w + inner / 2);
+      if (Math.abs(target - m.x) <= thr) {
+        nx = target;
+        const cy = m.y + m.h / 2, gap = Math.round(inner / 2);
+        badgesX.push({ cx: (L.x + L.w + target) / 2, cy, value: gap }, { cx: (target + m.w + R.x) / 2, cy, value: gap });
+      }
+    }
+  }
+  const ox = os.filter((o) => o.x < m.x + m.w && o.x + o.w > m.x);
+  const T = ox.filter((o) => o.y + o.h <= m.y + 1).sort((a, b) => (b.y + b.h) - (a.y + a.h))[0];
+  const B = ox.filter((o) => o.y >= m.y + m.h - 1).sort((a, b) => a.y - b.y)[0];
+  if (T && B) {
+    const inner = B.y - (T.y + T.h) - m.h;
+    if (inner > 0) {
+      const target = Math.round(T.y + T.h + inner / 2);
+      if (Math.abs(target - m.y) <= thr) {
+        ny = target;
+        const cx = m.x + m.w / 2, gap = Math.round(inner / 2);
+        badgesY.push({ cx, cy: (T.y + T.h + target) / 2, value: gap }, { cx, cy: (target + m.h + B.y) / 2, value: gap });
+      }
+    }
+  }
+  return { nx, ny, badgesX, badgesY };
 }
 
 /**
@@ -66,6 +103,7 @@ export function PlacementStage({
   const viewportRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [spacing, setSpacing] = useState<{ cx: number; cy: number; value: number }[]>([]);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const authoring = mode === "author";
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -188,6 +226,12 @@ export function PlacementStage({
         if (bx) moved.x += bx.delta;
         if (by) moved.y += by.delta;
         setGuides({ x: bx ? [bx.line] : [], y: by ? [by.line] : [] });
+        // Equal-spacing snap on axes the alignment guides didn't already claim.
+        const sp = equalSpacing(moved, os, thr);
+        const showX = !bx && sp.nx !== undefined, showY = !by && sp.ny !== undefined;
+        if (showX) moved.x = sp.nx!;
+        if (showY) moved.y = sp.ny!;
+        setSpacing([...(showX ? sp.badgesX : []), ...(showY ? sp.badgesY : [])]);
         onChange?.(drag.id, moved, drag.rot);
       } else if (drag.mode === "group") {
         const rs = drag.ids.map((id) => drag.rects[id]);
@@ -200,11 +244,13 @@ export function PlacementStage({
         const adx = dx + (sbx ? sbx.delta : 0), ady = dy + (sby ? sby.delta : 0);
         setGuides({ x: sbx ? [sbx.line] : [], y: sby ? [sby.line] : [] });
         onChangeMany?.(drag.ids.map((id) => ({ id, rect: { ...drag.rects[id], x: Math.round(drag.rects[id].x + adx), y: Math.round(drag.rects[id].y + ady) } })));
+      } else if (drag.mode === "groupResize") {
+        onChangeMany?.(groupResize(drag, dx, dy, e.shiftKey));
       } else {
         onChange?.(drag.id, resize(drag, dx, dy, e.shiftKey), drag.rot);
       }
     };
-    const up = () => { setDrag(null); setGuides({ x: [], y: [] }); };
+    const up = () => { setDrag(null); setGuides({ x: [], y: [] }); setSpacing([]); };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
@@ -250,6 +296,18 @@ export function PlacementStage({
   const visible = elements.filter((e) => e.placement === placement.placement && !e.hidden);
   const cs = authoring ? 1 / zoom : 1;
   const single = selectedIds.length === 1 ? selectedIds[0] : null;
+  const groupBox = (() => {
+    if (selectedIds.length < 2) return null;
+    const rs = visible.filter((e) => selectedSet.has(e.id)).map((e) => e.rect);
+    if (rs.length < 2) return null;
+    const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y));
+    return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+  })();
+  const startGroupRects = () => {
+    const rects: Record<string, Rect> = {};
+    for (const id of selectedIds) { const g = elements.find((x) => x.id === id); if (g) rects[id] = g.rect; }
+    return rects;
+  };
 
   const surface = (
     <div
@@ -274,6 +332,9 @@ export function PlacementStage({
         <canvas ref={canvasRef} />
         {authoring && guides.x.map((gx, i) => <span key={`gx${i}`} className="guide gx" style={{ left: `${(gx / W) * 100}%` }} />)}
         {authoring && guides.y.map((gy, i) => <span key={`gy${i}`} className="guide gy" style={{ top: `${(gy / H) * 100}%` }} />)}
+        {authoring && spacing.map((s, i) => (
+          <span key={`sp${i}`} className="space-badge" style={{ left: `${(s.cx / W) * 100}%`, top: `${(s.cy / H) * 100}%`, transform: `translate(-50%, -50%) scale(${cs})` }}>{s.value}</span>
+        ))}
         {authoring && marquee && <div className="marquee" style={pct(marquee)} />}
         {authoring && visible.map((el) => {
           const sel = selectedSet.has(el.id);
@@ -330,6 +391,18 @@ export function PlacementStage({
             </div>
           );
         })}
+        {authoring && groupBox && (
+          <div className="group-box" style={pct(groupBox)}>
+            {HANDLES.map((h) => (
+              <span key={h.id} className="el-handle" style={{ left: `${h.x}%`, top: `${h.y}%`, cursor: h.cursor, transform: `translate(-50%, -50%) scale(${cs})` }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onTransformStart?.();
+                  setDrag({ mode: "groupResize", ids: [...selectedIds], sx: e.clientX, sy: e.clientY, rects: startGroupRects(), bbox: groupBox, handle: h.id });
+                }} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -359,6 +432,28 @@ export function PlacementStage({
       </div>
     </div>
   );
+}
+
+/** Scale a whole multi-selection from a bounding-box handle (uniform by default, Shift frees). */
+function groupResize(d: Extract<Drag, { mode: "groupResize" }>, dx: number, dy: number, shift: boolean): { id: string; rect: Rect }[] {
+  const { bbox, handle, rects, ids } = d;
+  const left = handle.includes("w"), right = handle.includes("e"), top = handle.includes("n"), bottom = handle.includes("s");
+  const corner = (left || right) && (top || bottom);
+  const nbw = bbox.w + (right ? dx : left ? -dx : 0);
+  const nbh = bbox.h + (bottom ? dy : top ? -dy : 0);
+  let sx = nbw / bbox.w, sy = nbh / bbox.h;
+  if (corner && !shift) { const s = Math.abs(nbw - bbox.w) > Math.abs(nbh - bbox.h) ? sx : sy; sx = s; sy = s; }
+  else if (!corner) { if (left || right) sy = 1; else sx = 1; }
+  sx = Math.max(0.05, sx); sy = Math.max(0.05, sy);
+  const ax = left ? bbox.x + bbox.w : bbox.x;
+  const ay = top ? bbox.y + bbox.h : bbox.y;
+  return ids.map((id) => {
+    const r = rects[id];
+    return { id, rect: {
+      x: Math.round(ax + (r.x - ax) * sx), y: Math.round(ay + (r.y - ay) * sy),
+      w: Math.max(10, Math.round(r.w * sx)), h: Math.max(10, Math.round(r.h * sy)),
+    } };
+  });
 }
 
 /** Per-handle resize in print-file units; proportional for images/graphics (Shift frees). */

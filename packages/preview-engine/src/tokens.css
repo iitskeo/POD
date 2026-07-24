@@ -202,3 +202,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
   background: var(--surface); border: 1.5px solid var(--signal); border-radius: 50%; cursor: grab;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
+/* Multi-selection bounding box (group resize). */
+.group-box { position: absolute; border: 1px dashed color-mix(in srgb, var(--signal) 60%, transparent); pointer-events: none; }
+.group-box .el-handle { pointer-events: auto; }
