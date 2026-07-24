@@ -2,6 +2,14 @@
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
+/** A linear gradient fill (spec 07 §9.3/§10.2). */
+export interface Gradient { from: string; to: string; angle: number }
+
+/** Image adjustment filters (spec 07 §10.1). Ratios where 1 = unchanged. */
+export interface ImageFilter {
+  grayscale?: number; sepia?: number; brightness?: number; contrast?: number; saturate?: number; blur?: number;
+}
+
 // ---- Product side (3.1, 3.2) ---------------------------------------------------
 
 export interface Placement {
@@ -33,6 +41,8 @@ export interface ElementBase {
   rotation?: number;
   locked?: boolean;
   hidden?: boolean;
+  opacity?: number;               // 0-1, default 1 (spec §17)
+  groupId?: string;               // members of a named group share this id (spec §6.6)
 }
 
 export interface TextElement extends ElementBase {
@@ -48,6 +58,7 @@ export interface TextElement extends ElementBase {
   case?: "upper" | "title" | "lower"; // letter-case transform at render time
   lineHeight?: number;             // line-height multiplier (default 1.15)
   letterSpacing?: number;
+  gradient?: Gradient;             // gradient fill overrides `color` when set
   outline?: { color: string; width: number };
   shadow?: { color: string; blur: number; dx: number; dy: number };
   arc?: number;
@@ -67,6 +78,7 @@ export interface ImageElement extends ElementBase {
   kind: "image";
   storageKey: string;              // default upload id
   aspect: number;
+  filter?: ImageFilter;
   // Image-choice slot: the customer picks among uploaded images (upload ids),
   // without the owner routing them through the graphics library.
   choiceSlot?: { label: string; options: string[] };
@@ -83,7 +95,7 @@ export interface PatternElement extends ElementBase {
 
 export interface BackgroundElement extends ElementBase {
   kind: "background";
-  fill: { color?: string; assetId?: string; storageKey?: string };
+  fill: { color?: string; assetId?: string; storageKey?: string; gradient?: Gradient };
 }
 
 export type Element =

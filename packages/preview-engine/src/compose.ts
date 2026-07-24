@@ -1,5 +1,29 @@
 import { resolveGraphic, resolveImage, resolveText } from "./slots";
-import type { Element, Placement, SlotValues, TextElement } from "./types";
+import type { Element, Gradient, ImageFilter, Placement, Rect, SlotValues, TextElement } from "./types";
+
+/** Build a canvas linear gradient across a rect at the given angle (degrees). */
+function linearGradient(ctx: CanvasRenderingContext2D, r: Rect, grad: Gradient): CanvasGradient {
+  const a = (grad.angle * Math.PI) / 180;
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  const len = (Math.abs(Math.cos(a)) * r.w + Math.abs(Math.sin(a)) * r.h) / 2;
+  const dx = Math.cos(a) * len, dy = Math.sin(a) * len;
+  const g = ctx.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy);
+  g.addColorStop(0, grad.from);
+  g.addColorStop(1, grad.to);
+  return g;
+}
+
+/** Compose a CSS filter string from image-adjustment values. */
+function filterString(f: ImageFilter): string {
+  const p: string[] = [];
+  if (f.grayscale) p.push(`grayscale(${f.grayscale})`);
+  if (f.sepia) p.push(`sepia(${f.sepia})`);
+  if (f.brightness != null && f.brightness !== 1) p.push(`brightness(${f.brightness})`);
+  if (f.contrast != null && f.contrast !== 1) p.push(`contrast(${f.contrast})`);
+  if (f.saturate != null && f.saturate !== 1) p.push(`saturate(${f.saturate})`);
+  if (f.blur) p.push(`blur(${f.blur}px)`);
+  return p.length ? p.join(" ") : "none";
+}
 
 /**
  * The app supplies drawable images; the engine stays pure. Graphics are recolored and
@@ -143,6 +167,7 @@ export async function renderArtwork(
   for (const el of els) {
     const r = { x: el.rect.x * scale, y: el.rect.y * scale, w: el.rect.w * scale, h: el.rect.h * scale };
     ctx.save();
+    ctx.globalAlpha = el.opacity ?? 1;
     if (el.rotation) {
       ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
       ctx.rotate((el.rotation * Math.PI) / 180);
@@ -150,7 +175,8 @@ export async function renderArtwork(
     }
 
     if (el.kind === "background") {
-      if (el.fill.color) { ctx.fillStyle = el.fill.color; ctx.fillRect(0, 0, W, H); }
+      if (el.fill.gradient) { ctx.fillStyle = linearGradient(ctx, { x: 0, y: 0, w: W, h: H }, el.fill.gradient); ctx.fillRect(0, 0, W, H); }
+      else if (el.fill.color) { ctx.fillStyle = el.fill.color; ctx.fillRect(0, 0, W, H); }
       else {
         const img = el.fill.storageKey ? await resolver.image(el.fill.storageKey)
           : el.fill.assetId ? await resolver.graphic(el.fill.assetId) : null;
@@ -158,7 +184,7 @@ export async function renderArtwork(
       }
     } else if (el.kind === "image") {
       const img = await resolver.image(resolveImage(el, values));
-      if (img) ctx.drawImage(img, r.x, r.y, r.w, r.h);
+      if (img) { if (el.filter) ctx.filter = filterString(el.filter); ctx.drawImage(img, r.x, r.y, r.w, r.h); }
     } else if (el.kind === "graphic") {
       const { assetId, color } = resolveGraphic(el, values);
       const img = await resolver.graphic(assetId, color);
@@ -174,7 +200,7 @@ export async function renderArtwork(
       if (content.trim()) {
         const fit = fitText(ctx, content, r.w, r.h, el, H);
         overflow = overflow || fit.overflow;
-        ctx.fillStyle = color;
+        ctx.fillStyle = el.gradient ? linearGradient(ctx, r, el.gradient) : color;
         ctx.textBaseline = "middle";
         ctx.textAlign = el.align;
         ctx.font = `${el.weight ?? 700} ${fit.size}px ${el.font}`;

@@ -2,14 +2,14 @@ import {
   PlacementStage, SEED_ASSETS, SHAPE_ASSETS, ICONIFY_SETS, searchIconify, iconThumbUrl, fetchIconSvg,
   makeResolver, elementLabel, svgDataUrl, alignRect, slotsOf, Icon,
   type Align, type Asset, type BackgroundElement, type Element, type GraphicElement, type IconRef,
-  type ImageElement, type PatternElement, type Placement, type Product, type Rect, type Slot,
-  type SlotValues, type TextElement,
+  type ImageElement, type ImageFilter, type PatternElement, type Placement, type Product, type Rect,
+  type Slot, type SlotValues, type TextElement,
 } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { api } from "./api";
 import { useHistory } from "./history";
 import { FontPicker } from "./FontPicker";
-import { ColorField } from "./ColorField";
+import { ColorField, GradientField } from "./ColorField";
 import { getList, pushRecent, toggleFav } from "./prefs";
 
 const COLORS = ["#0A0A0A", "#FFFFFF", "#FF5A1F", "#161616", "#F5F5F0", "#1D4ED8", "#DC2626", "#16A34A"];
@@ -483,6 +483,11 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
         <aside className="props">
           <span className="eyebrow">Properties</span>
           {!selected && <p className="hint">{selectedIds.length > 1 ? `${selectedIds.length} elements selected — align, distribute, move or delete them together.` : "Select an element to edit it."}</p>}
+          {selected && (
+            <label className="field"><span className="hint">Opacity · {Math.round((selected.opacity ?? 1) * 100)}%</span>
+              <input type="range" min={0} max={1} step={0.01} value={selected.opacity ?? 1} onChange={(e) => update(selected.id, { opacity: Number(e.target.value) })} />
+            </label>
+          )}
           {selected?.kind === "text" && <TextProps el={selected} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "graphic" && <GraphicProps el={selected} parts={graphicById(selected.assetId)?.recolorParts ?? []} graphics={graphics} onChange={(p) => update(selected.id, p)} />}
           {selected?.kind === "image" && <ImageProps el={selected} onChange={(p) => update(selected.id, p)}
@@ -654,6 +659,7 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
         </select></label>
       </div>
       <ColorField label="Color" value={el.color} palette={COLORS} onChange={(color) => onChange({ color })} />
+      <GradientField value={el.gradient} onChange={(gradient) => onChange({ gradient })} />
       <TextEffectPresets el={el} onChange={onChange} />
       <div className="field row">
         <label><span className="hint">Letter spacing</span><input type="number" value={el.letterSpacing ?? 0} onChange={(e) => onChange({ letterSpacing: Number(e.target.value) })} /></label>
@@ -753,6 +759,37 @@ function GraphicProps({ el, parts, graphics, onChange }: { el: GraphicElement; p
   );
 }
 
+/** Image adjustments: presets + sliders (spec §10.1). */
+function ImageFilters({ value, onChange }: { value?: ImageFilter; onChange: (f: ImageFilter | undefined) => void }) {
+  const f: ImageFilter = value ?? {};
+  const presets: { id: string; label: string; apply?: ImageFilter }[] = [
+    { id: "original", label: "Original", apply: undefined },
+    { id: "bw", label: "B&W", apply: { grayscale: 1 } },
+    { id: "vintage", label: "Vintage", apply: { sepia: 0.5, contrast: 1.1, saturate: 0.85 } },
+    { id: "vivid", label: "Vivid", apply: { saturate: 1.5, contrast: 1.1 } },
+    { id: "cool", label: "Cool", apply: { brightness: 1.05, saturate: 1.1, contrast: 1.05 } },
+  ];
+  const set = (k: keyof ImageFilter, v: number, dflt: number) => {
+    const next: ImageFilter = { ...f, [k]: v };
+    if (v === dflt) delete next[k];
+    onChange(Object.keys(next).length ? next : undefined);
+  };
+  const slider = (k: keyof ImageFilter, label: string, min: number, max: number, dflt: number) => (
+    <label className="field"><span className="hint">{label} · {(f[k] ?? dflt).toFixed(2)}</span>
+      <input type="range" min={min} max={max} step={0.01} value={f[k] ?? dflt} onChange={(e) => set(k, Number(e.target.value), dflt)} /></label>
+  );
+  return (
+    <div className="pgroup">
+      <span className="eyebrow" style={{ marginTop: 4 }}>Adjust</span>
+      <div className="preset-row">{presets.map((p) => <button key={p.id} className="preset" onClick={() => onChange(p.apply)}>{p.label}</button>)}</div>
+      {slider("brightness", "Brightness", 0.5, 1.5, 1)}
+      {slider("contrast", "Contrast", 0.5, 1.5, 1)}
+      {slider("saturate", "Saturation", 0, 2, 1)}
+      {slider("grayscale", "Grayscale", 0, 1, 0)}
+    </div>
+  );
+}
+
 function ImageProps({ el, onChange, addOption, onPattern }: {
   el: ImageElement; onChange: (p: Partial<ImageElement>) => void;
   addOption: (file: File) => Promise<string | null>; onPattern: () => void;
@@ -767,6 +804,7 @@ function ImageProps({ el, onChange, addOption, onPattern }: {
   const fixed = !el.choiceSlot;
   return (
     <div className="pgroup">
+      <ImageFilters value={el.filter} onChange={(filter) => onChange({ filter })} />
       <span className="eyebrow" style={{ marginTop: 4 }}>What the customer can change</span>
       {fixed && <p className="hint">Fixed — the customer can't change this image.</p>}
       <label className="check">
@@ -807,7 +845,8 @@ function PatternProps({ el, onChange }: { el: PatternElement; onChange: (p: Part
 function BackgroundProps({ el, onChange }: { el: BackgroundElement; graphics: Graphic[]; onChange: (p: Partial<BackgroundElement>) => void }) {
   return (
     <div className="pgroup">
-      <ColorField label="Fill color" value={el.fill.color} palette={COLORS} onChange={(color) => onChange({ fill: { color } })} />
+      <ColorField label="Fill color" value={el.fill.color} palette={COLORS} onChange={(color) => onChange({ fill: { ...el.fill, color, gradient: undefined } })} />
+      <GradientField value={el.fill.gradient} onChange={(gradient) => onChange({ fill: { ...el.fill, gradient } })} />
     </div>
   );
 }

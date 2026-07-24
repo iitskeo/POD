@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Icon } from "@abbiss/preview-engine";
+import { Icon, type Gradient } from "@abbiss/preview-engine";
 import { getList, pushRecent } from "./prefs";
 
 const RECENT = "recent.colors";
@@ -32,6 +32,25 @@ export function ColorField({ label, value, palette, onChange }: {
       </div>
       {recent.length > 0 && (
         <div className="swatches recents">{recent.map((c) => <button key={c} className="sw sm" style={{ background: c }} title={c} onClick={() => set(c)} />)}</div>
+      )}
+    </div>
+  );
+}
+
+/** Linear-gradient fill: two stops + angle (spec §9.3/§10.2). */
+export function GradientField({ value, onChange }: { value?: Gradient; onChange: (g: Gradient | undefined) => void }) {
+  const g = value ?? { from: "#FF5A1F", to: "#1D4ED8", angle: 90 };
+  return (
+    <div className="field">
+      <label className="check"><input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked ? g : undefined)} /> Gradient fill</label>
+      {value && (
+        <div className="grad-row">
+          <input type="color" value={toHex(value.from)} onChange={(e) => onChange({ ...value, from: e.target.value })} title="From" />
+          <input type="color" value={toHex(value.to)} onChange={(e) => onChange({ ...value, to: e.target.value })} title="To" />
+          <label className="grad-angle"><span className="hint">Angle · {value.angle}°</span>
+            <input type="range" min={0} max={360} value={value.angle} onChange={(e) => onChange({ ...value, angle: Number(e.target.value) })} />
+          </label>
+        </div>
       )}
     </div>
   );
