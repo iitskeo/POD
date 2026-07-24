@@ -39,7 +39,8 @@ type Drag =
   | { mode: "move"; id: string; sx: number; sy: number; rect: Rect; rot: number }
   | { mode: "resize"; id: string; sx: number; sy: number; rect: Rect; rot: number; handle: HandleId; aspect: number | null }
   | { mode: "rotate"; id: string; cx: number; cy: number; rect: Rect; start: number }
-  | { mode: "group"; ids: string[]; sx: number; sy: number; rects: Record<string, Rect> };
+  | { mode: "group"; ids: string[]; sx: number; sy: number; rects: Record<string, Rect> }
+  | { mode: "groupResize"; ids: string[]; sx: number; sy: number; rects: Record<string, Rect>; bbox: Rect; handle: HandleId };
 
 function snapAxis(anchors: number[], targets: number[], thr: number): { delta: number; line: number } | null {
   let best: { delta: number; line: number } | null = null;
@@ -200,6 +201,8 @@ export function PlacementStage({
         const adx = dx + (sbx ? sbx.delta : 0), ady = dy + (sby ? sby.delta : 0);
         setGuides({ x: sbx ? [sbx.line] : [], y: sby ? [sby.line] : [] });
         onChangeMany?.(drag.ids.map((id) => ({ id, rect: { ...drag.rects[id], x: Math.round(drag.rects[id].x + adx), y: Math.round(drag.rects[id].y + ady) } })));
+      } else if (drag.mode === "groupResize") {
+        onChangeMany?.(groupResize(drag, dx, dy, e.shiftKey));
       } else {
         onChange?.(drag.id, resize(drag, dx, dy, e.shiftKey), drag.rot);
       }
@@ -250,6 +253,18 @@ export function PlacementStage({
   const visible = elements.filter((e) => e.placement === placement.placement && !e.hidden);
   const cs = authoring ? 1 / zoom : 1;
   const single = selectedIds.length === 1 ? selectedIds[0] : null;
+  const groupBox = (() => {
+    if (selectedIds.length < 2) return null;
+    const rs = visible.filter((e) => selectedSet.has(e.id)).map((e) => e.rect);
+    if (rs.length < 2) return null;
+    const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y));
+    return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+  })();
+  const startGroupRects = () => {
+    const rects: Record<string, Rect> = {};
+    for (const id of selectedIds) { const g = elements.find((x) => x.id === id); if (g) rects[id] = g.rect; }
+    return rects;
+  };
 
   const surface = (
     <div
@@ -330,6 +345,18 @@ export function PlacementStage({
             </div>
           );
         })}
+        {authoring && groupBox && (
+          <div className="group-box" style={pct(groupBox)}>
+            {HANDLES.map((h) => (
+              <span key={h.id} className="el-handle" style={{ left: `${h.x}%`, top: `${h.y}%`, cursor: h.cursor, transform: `translate(-50%, -50%) scale(${cs})` }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onTransformStart?.();
+                  setDrag({ mode: "groupResize", ids: [...selectedIds], sx: e.clientX, sy: e.clientY, rects: startGroupRects(), bbox: groupBox, handle: h.id });
+                }} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -359,6 +386,28 @@ export function PlacementStage({
       </div>
     </div>
   );
+}
+
+/** Scale a whole multi-selection from a bounding-box handle (uniform by default, Shift frees). */
+function groupResize(d: Extract<Drag, { mode: "groupResize" }>, dx: number, dy: number, shift: boolean): { id: string; rect: Rect }[] {
+  const { bbox, handle, rects, ids } = d;
+  const left = handle.includes("w"), right = handle.includes("e"), top = handle.includes("n"), bottom = handle.includes("s");
+  const corner = (left || right) && (top || bottom);
+  const nbw = bbox.w + (right ? dx : left ? -dx : 0);
+  const nbh = bbox.h + (bottom ? dy : top ? -dy : 0);
+  let sx = nbw / bbox.w, sy = nbh / bbox.h;
+  if (corner && !shift) { const s = Math.abs(nbw - bbox.w) > Math.abs(nbh - bbox.h) ? sx : sy; sx = s; sy = s; }
+  else if (!corner) { if (left || right) sy = 1; else sx = 1; }
+  sx = Math.max(0.05, sx); sy = Math.max(0.05, sy);
+  const ax = left ? bbox.x + bbox.w : bbox.x;
+  const ay = top ? bbox.y + bbox.h : bbox.y;
+  return ids.map((id) => {
+    const r = rects[id];
+    return { id, rect: {
+      x: Math.round(ax + (r.x - ax) * sx), y: Math.round(ay + (r.y - ay) * sy),
+      w: Math.max(10, Math.round(r.w * sx)), h: Math.max(10, Math.round(r.h * sy)),
+    } };
+  });
 }
 
 /** Per-handle resize in print-file units; proportional for images/graphics (Shift frees). */
