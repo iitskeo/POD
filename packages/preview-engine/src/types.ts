@@ -117,7 +117,13 @@ export interface Product {
   externalVariantId: string | null;
   hasPhoto: boolean;
   retailPriceCents: number;
+  /** The original Printful base price (min variant), kept for owner reference. */
+  basePriceCents: number;
   currency: string;
+  /** Printful product description (owner-editable). */
+  description: string | null;
+  /** Material composition, e.g. "100% Cotton" (owner-editable). */
+  materials: string | null;
   placements: Placement[];
   variantTemplates: Record<number, Placement[]> | null;
   variants: Variant[];

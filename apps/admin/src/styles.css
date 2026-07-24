@@ -23,8 +23,14 @@ input, select {
   box-shadow: var(--highlight);
   transition: border-color var(--m-micro) var(--ease-out), box-shadow var(--m-micro) var(--ease-out);
 }
-input::placeholder { color: var(--text-3); }
-input:focus, select:focus { border-color: color-mix(in srgb, var(--signal) 60%, transparent); box-shadow: var(--accent-glow); }
+textarea {
+  background: var(--elev-2); border: 1px solid var(--line); border-radius: var(--r-control);
+  color: var(--text-1); font-family: var(--body); font-size: var(--t-13); padding: 10px 11px; outline: none;
+  box-shadow: var(--highlight); resize: vertical; width: 100%; line-height: 1.6;
+}
+input::placeholder, textarea::placeholder { color: var(--text-3); }
+input:focus, select:focus, textarea:focus { border-color: color-mix(in srgb, var(--signal) 60%, transparent); box-shadow: var(--accent-glow); }
+input.ro { background: var(--elev-1); color: var(--text-2); cursor: default; }
 input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; padding: 0; background: var(--elev-3); border: 0; border-radius: 999px; cursor: pointer; }
 input[type="range"]:focus { box-shadow: none; }
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--signal); box-shadow: 0 1px 3px rgba(0,0,0,0.4); cursor: pointer; }
@@ -74,6 +80,8 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 .mine-card { display: flex; gap: var(--s3); align-items: center; background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s3); cursor: pointer; text-align: left; color: inherit; box-shadow: var(--highlight); transition: transform var(--m-std) var(--ease-out), border-color var(--m-std) var(--ease-out), box-shadow var(--m-std) var(--ease-out); }
 .mine-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--bone) 22%, transparent); box-shadow: var(--shadow-2), var(--highlight); }
 .mine-card img { width: 48px; height: 48px; object-fit: contain; background: var(--surface); border-radius: var(--r-control); }
+.mine-card > div { flex: 1; min-width: 0; text-align: left; }
+.mine-chevron { margin-left: auto; color: var(--text-3); flex-shrink: 0; }
 .mine-name { font-size: var(--t-13); font-weight: 500; }
 .status { font-size: var(--t-11); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); }
 .status[data-published="true"] { color: var(--ok); }
@@ -146,6 +154,15 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 .prod-name { font-size: var(--t-13); font-weight: 500; }
 .price-field { display: flex; flex-direction: column; gap: 3px; width: 116px; }
 .price-field input { padding: 8px 9px; font-size: var(--t-13); }
+.price-field { width: 104px; }
+
+/* Product details modal (Create Products). */
+.detail-body { display: flex; gap: var(--s4); }
+.detail-photo { width: 140px; height: 140px; object-fit: contain; background: var(--surface); border-radius: var(--r-control); flex-shrink: 0; }
+.detail-info { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.detail-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); font-size: var(--t-13); }
+.detail-block { display: flex; flex-direction: column; gap: 4px; }
+.detail-block .hint { line-height: 1.65; white-space: pre-wrap; }
 
 /* Publish modal + mockup picker (spec §15) */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.62); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 50; padding: var(--s5); animation: fade var(--m-std) var(--ease-out); }

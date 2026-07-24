@@ -53,6 +53,7 @@ export class ApiClient {
     name?: string; retailPriceCents?: number; status?: string;
     offeredVariantColors?: string[] | null;
     mockups?: { generated: string[]; featured: string[] } | null;
+    description?: string | null; materials?: string | null;
   }) {
     return this.req<Product>(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
   }

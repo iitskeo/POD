@@ -80,7 +80,7 @@ export async function importProduct(
   const rq = `selling_region_name=${encodeURIComponent(region)}`;
 
   const [prodRes, stylesRes, variants, templates, pricesRes] = await Promise.all([
-    call<{ data?: { name: string; techniques?: Array<{ key: string }> } }>(
+    call<{ data?: { name: string; description?: string; material?: Array<{ name: string; percentage?: number }> | string; techniques?: Array<{ key: string }> } }>(
       env, store, `/v2/catalog-products/${catalogProductId}?${rq}`,
     ),
     call<{ data?: PrintFileStyle[] }>(
@@ -141,16 +141,18 @@ export async function importProduct(
   const now = Date.now();
   const techniqueList = [...new Set(placements.map((p) => p.technique))];
   const priceRef = pickPrice(pricesRes.data);
+  const description = product.description ?? null;
+  const materials = normalizeMaterials(product.material);
 
   await env.DB.prepare(
     `INSERT INTO products
        (id, slug, name, status, source, external_product_id, external_variant_id,
-        photo_key, retail_price_cents, currency, placements, variant_templates,
-        variants, techniques, store_id, created_at, updated_at)
-     VALUES (?1,?2,?3,'draft','printful',?4,?5,?6,?7,'USD',?8,?9,?10,?11,?12,?13,?13)
+        photo_key, retail_price_cents, base_price_cents, currency, placements, variant_templates,
+        variants, techniques, description, materials, store_id, created_at, updated_at)
+     VALUES (?1,?2,?3,'draft','printful',?4,?5,?6,?7,?8,'USD',?9,?10,?11,?12,?13,?14,?15,?16,?16)
      ON CONFLICT(id) DO UPDATE SET
-       name=?3, photo_key=?6, placements=?8, variant_templates=?9, variants=?10,
-       techniques=?11, updated_at=?13`,
+       name=?3, photo_key=?6, base_price_cents=?8, placements=?9, variant_templates=?10, variants=?11,
+       techniques=?12, description=?13, materials=?14, updated_at=?16`,
   ).bind(
     productId,
     slugify(`${product.name}-${catalogProductId}`),
@@ -159,10 +161,13 @@ export async function importProduct(
     String(representative.id),
     photoKey,
     priceRef,
+    priceRef,
     JSON.stringify(placements),
     Object.keys(variantTemplates).length ? JSON.stringify(variantTemplates) : null,
     JSON.stringify(variantList),
     JSON.stringify(techniqueList),
+    description,
+    materials,
     store.id,
     now,
   ).run();
@@ -176,6 +181,14 @@ export async function importProduct(
   ).bind(designId, productId, product.name, now).run();
 
   return { productId, designId };
+}
+
+/** Printful's material can be an array of {name, percentage} or a string; render it readable. */
+function normalizeMaterials(material: Array<{ name: string; percentage?: number }> | string | undefined): string | null {
+  if (!material) return null;
+  if (typeof material === "string") return material.trim() || null;
+  const parts = material.map((m) => (m.percentage != null ? `${m.percentage}% ${m.name}` : m.name)).filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
 }
 
 /** A representative reference price (min variant price), just for owner context. */

@@ -11,6 +11,7 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
   const [products, setProducts] = useState<Product[]>([]);
   const [status, setStatus] = useState("");
   const [publishing, setPublishing] = useState<Product | null>(null);
+  const [editing, setEditing] = useState<Product | null>(null);
 
   const load = () => api.listProducts().then(setProducts).catch((e) => setStatus(String(e.message ?? e)));
   useEffect(() => { load(); }, []);
@@ -47,10 +48,16 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
               <span className="mono status" data-published={p.status === "published"}>{p.status}</span>
             </div>
             <label className="price-field">
+              <span className="hint">Base cost</span>
+              <input type="text" readOnly className="ro" title="Printful base price (not editable)"
+                value={p.basePriceCents ? `$${(p.basePriceCents / 100).toFixed(2)}` : "—"} />
+            </label>
+            <label className="price-field">
               <span className="hint">Retail (USD)</span>
               <input type="number" step="0.01" defaultValue={(p.retailPriceCents / 100).toFixed(2)}
                 onBlur={(e) => setPrice(p.id, Number(e.target.value))} />
             </label>
+            <button className="btn" onClick={() => setEditing(p)}>Edit</button>
             <button className="btn" onClick={() => onDesign(p.id)}>Design</button>
             {p.status === "published"
               ? <button className="btn" onClick={() => unpublish(p)}>Unpublish</button>
@@ -60,6 +67,46 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
       </div>
 
       {publishing && <PublishModal product={publishing} onClose={() => setPublishing(null)} onPublished={onPublished} />}
+      {editing && <ProductEditModal product={editing} onClose={() => setEditing(null)}
+        onSaved={(up) => { setProducts((ps) => ps.map((x) => (x.id === up.id ? up : x))); setEditing(null); }} />}
+    </div>
+  );
+}
+
+/** Edit product name, description and materials (defaults come from Printful). */
+function ProductEditModal({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: (p: Product) => void }) {
+  const [name, setName] = useState(product.name);
+  const [description, setDescription] = useState(product.description ?? "");
+  const [materials, setMaterials] = useState(product.materials ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const save = async () => {
+    setBusy(true); setErr("");
+    try {
+      const up = await api.patchProduct(product.id, { name: name.trim() || product.name, description: description.trim() || null, materials: materials.trim() || null });
+      onSaved(up);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); setBusy(false); }
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <strong>Edit · {product.name}</strong>
+          <button className="mini" title="Close" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        {err && <p className="hint warn">{err}</p>}
+        <label className="field"><span className="hint">Product name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="field"><span className="hint">Materials (leave blank to use the Printful default)</span>
+          <input value={materials} onChange={(e) => setMaterials(e.target.value)} placeholder="e.g. 100% Cotton" /></label>
+        <label className="field"><span className="hint">Description (leave blank to use the Printful default)</span>
+          <textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+        <div className="modal-actions">
+          <div className="spacer" />
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="cta" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
     </div>
   );
 }

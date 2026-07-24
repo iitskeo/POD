@@ -1,4 +1,4 @@
-import { minPrice, type CatalogProduct, type Product } from "@abbiss/preview-engine";
+import { minPrice, Icon, type CatalogProduct, type Product } from "@abbiss/preview-engine";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 
@@ -13,6 +13,7 @@ export function CreateProducts({ onEdit }: { onEdit: (productId: string) => void
   const [importing, setImporting] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prices, setPrices] = useState<Map<number, number | null>>(new Map());
+  const [details, setDetails] = useState<Product | null>(null);
   const asked = useRef(new Set<number>());
 
   useEffect(() => {
@@ -80,12 +81,13 @@ export function CreateProducts({ onEdit }: { onEdit: (productId: string) => void
           <span className="eyebrow">Your imported products</span>
           <div className="mine-grid">
             {mine.map((p) => (
-              <button key={p.id} className="mine-card" onClick={() => onEdit(p.id)}>
+              <button key={p.id} className="mine-card" onClick={() => setDetails(p)}>
                 {p.hasPhoto && <img src={api.productPhotoUrl(p.id)} alt="" />}
                 <div>
                   <div className="mine-name">{p.name}</div>
                   <span className="mono status" data-published={p.status === "published"}>{p.status}</span>
                 </div>
+                <Icon name="search" size={15} className="mine-chevron" />
               </button>
             ))}
           </div>
@@ -118,6 +120,39 @@ export function CreateProducts({ onEdit }: { onEdit: (productId: string) => void
           {filtered.length > VISIBLE && <p className="hint">Showing {VISIBLE}. Narrow the search.</p>}
         </>
       )}
+
+      {details && <ProductDetailsModal product={details} onClose={() => setDetails(null)} onDesign={() => { const id = details.id; setDetails(null); onEdit(id); }} />}
+    </div>
+  );
+}
+
+/** Read-only product details: photo, price, techniques, description and materials. */
+function ProductDetailsModal({ product, onClose, onDesign }: { product: Product; onClose: () => void; onDesign: () => void }) {
+  const colors = product.variants.filter((v, i, a) => a.findIndex((x) => x.color === v.color) === i).map((v) => v.color).filter(Boolean);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <strong>{product.name}</strong>
+          <button className="mini" title="Close" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <div className="detail-body">
+          {product.hasPhoto && <img className="detail-photo" src={api.productPhotoUrl(product.id)} alt="" />}
+          <div className="detail-info">
+            <div className="detail-row"><span className="hint">Status</span><span className="mono status" data-published={product.status === "published"}>{product.status}</span></div>
+            <div className="detail-row"><span className="hint">Base price</span><span>{product.basePriceCents ? `$${(product.basePriceCents / 100).toFixed(2)} ${product.currency}` : "—"}</span></div>
+            <div className="detail-row"><span className="hint">Retail price</span><span>{product.retailPriceCents ? `$${(product.retailPriceCents / 100).toFixed(2)}` : "not set"}</span></div>
+            <div className="detail-row"><span className="hint">Techniques</span><span>{product.techniques.length ? product.techniques.join(", ") : "—"}</span></div>
+            <div className="detail-row"><span className="hint">Colors</span><span>{colors.length} variants</span></div>
+          </div>
+        </div>
+        <div className="detail-block"><span className="eyebrow">Materials</span><p className="hint">{product.materials || "Not provided by Printful for this product."}</p></div>
+        <div className="detail-block"><span className="eyebrow">Description</span><p className="hint">{product.description || "No description available."}</p></div>
+        <div className="modal-actions">
+          <div className="spacer" />
+          <button className="cta" onClick={onDesign}>Design this product</button>
+        </div>
+      </div>
     </div>
   );
 }
