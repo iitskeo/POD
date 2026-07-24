@@ -32,10 +32,20 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [panel, setPanel] = useState<"add" | "library" | "graphics" | "templates">("add");
   const selectId = (id: string) => setSelectedIds([id]);
   const clearSel = () => setSelectedIds([]);
+  // Clicking any grouped element selects the whole group (spec §6.6).
+  const groupMembers = (id: string): string[] => {
+    const el = elements.find((e) => e.id === id);
+    return el?.groupId ? elements.filter((e) => e.groupId === el.groupId).map((e) => e.id) : [id];
+  };
+  const expandGroups = (ids: string[]): string[] => [...new Set(ids.flatMap((id) => groupMembers(id)))];
   const selectOne = (id: string | null, additive?: boolean) => {
     if (id == null) { setSelectedIds([]); return; }
-    setSelectedIds((cur) => (additive ? (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]) : [id]));
+    const members = groupMembers(id);
+    setSelectedIds((cur) => (additive
+      ? (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, ...members.filter((m) => !cur.includes(m))])
+      : members));
   };
+  const selectManyExpanded = (ids: string[]) => setSelectedIds(expandGroups(ids));
   const [status, setStatus] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quick, setQuick] = useState<{ id: string; name: string; elements: Element[] }[]>([]);
@@ -239,6 +249,18 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     hist.snapshot(`nudge:${selectedIds.join(",")}`);
     hist.set((els) => els.map((el) => (selectedIds.includes(el.id) ? ({ ...el, rect: { ...el.rect, x: el.rect.x + dx, y: el.rect.y + dy } } as Element) : el)));
   };
+  const groupSel = () => {
+    if (selectedIds.length < 2) return;
+    const gid = uid();
+    hist.commit((els) => els.map((e) => (selectedIds.includes(e.id) ? ({ ...e, groupId: gid } as Element) : e)));
+  };
+  const ungroupSel = () => hist.commit((els) => els.map((e) => (selectedIds.includes(e.id) ? ({ ...e, groupId: undefined } as Element) : e)));
+  // The group id if the whole selection shares one non-empty group, else null.
+  const selGroupId = (() => {
+    if (!selectedIds.length) return null;
+    const first = elements.find((e) => e.id === selectedIds[0])?.groupId;
+    return first && selectedIds.every((id) => elements.find((e) => e.id === id)?.groupId === first) ? first : null;
+  })();
 
   // One-gesture slot creation (spec §6.4 / §12): make the element customer-editable.
   const makeSlot = (id: string) => {
@@ -270,6 +292,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       if (typing) return;
       if (mod && k === "a") { e.preventDefault(); setSelectedIds(elements.filter((el) => el.placement === active).map((el) => el.id)); return; }
       if (mod && (e.key === "]" || e.key === "[")) { e.preventDefault(); selectedIds.forEach((id) => reorder(id, e.key === "]" ? 1 : -1)); return; }
+      if (mod && k === "g") { e.preventDefault(); e.shiftKey ? ungroupSel() : groupSel(); return; }
       if (mod && k === "d" && selectedIds.length) { e.preventDefault(); duplicateSel(); return; }
       if (k === "escape") { clearSel(); return; }
       if (selectedIds.length && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); removeSel(); return; }
@@ -443,9 +466,30 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
             </div>
 
           <span className="eyebrow" style={{ marginTop: 14 }}>Layers</span>
+          {(() => {
+            const seen = new Map<string, number>();
+            elements.filter((e) => e.placement === active && e.groupId).forEach((e) => seen.set(e.groupId!, (seen.get(e.groupId!) || 0) + 1));
+            const groups = [...seen.entries()];
+            if (!groups.length) return null;
+            return (
+              <div className="groups-list">
+                {groups.map(([gid, count], i) => {
+                  const members = elements.filter((e) => e.groupId === gid).map((e) => e.id);
+                  const on = members.length > 0 && members.every((m) => selectedIds.includes(m));
+                  return (
+                    <div key={gid} className="layers-group" data-on={on || undefined}>
+                      <span className="grip"><Icon name="group" size={13} /></span>
+                      <button className="lname" onClick={() => setSelectedIds(members)}>Group {i + 1} · {count} items</button>
+                      <button className="mini" title="Ungroup" onClick={() => hist.commit((els) => els.map((e) => (e.groupId === gid ? ({ ...e, groupId: undefined } as Element) : e)))}><Icon name="x" size={13} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           <ul className="layers">
             {[...elements].filter((e) => e.placement === active).sort((a, b) => b.z - a.z).map((el) => (
-              <li key={el.id} data-on={selectedIds.includes(el.id)} data-over={overLayer === el.id || undefined} draggable
+              <li key={el.id} data-on={selectedIds.includes(el.id)} data-over={overLayer === el.id || undefined} data-grouped={!!el.groupId || undefined} draggable
                 onDragStart={(e) => { setDragLayer(el.id); e.dataTransfer.effectAllowed = "move"; }}
                 onDragOver={(e) => { e.preventDefault(); if (dragLayer && overLayer !== el.id) setOverLayer(el.id); }}
                 onDrop={(e) => { e.preventDefault(); if (dragLayer) reorderLayers(dragLayer, el.id); setDragLayer(null); setOverLayer(null); }}
@@ -483,11 +527,17 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
                 <button className="mini" title="Distribute horizontally" onClick={() => distribute("h")}><Icon name="move-horizontal" size={15} /></button>
                 <button className="mini" title="Distribute vertically" onClick={() => distribute("v")}><Icon name="move-vertical" size={15} /></button>
               </>}
+              {selectedIds.length > 1 && <>
+                <span className="align-sep" />
+                {selGroupId
+                  ? <button className="mini" data-on title="Ungroup (Shift+Cmd/Ctrl+G)" onClick={ungroupSel}><Icon name="group" size={15} /></button>
+                  : <button className="mini" title="Group (Cmd/Ctrl+G)" onClick={groupSel}><Icon name="group" size={15} /></button>}
+              </>}
             </div>
           )}
           <div className="stage-stack">
             <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
-              mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={setSelectedIds}
+              mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={selectManyExpanded}
               onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} onDropAsset={onDropAsset} />
             {countFor(active) === 0 && (
               <div className="canvas-empty">

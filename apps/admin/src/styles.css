@@ -172,6 +172,11 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 .layers li { display: flex; align-items: center; gap: 2px; background: var(--elev-2); border: 1px solid transparent; border-radius: var(--r-control); padding: 3px 5px; box-shadow: var(--highlight); }
 .layers li[data-on="true"] { border-color: color-mix(in srgb, var(--signal) 55%, transparent); box-shadow: var(--accent-glow); }
 .layers li[data-over="true"] { box-shadow: inset 0 2px 0 0 var(--signal); }
+.layers li[data-grouped="true"] { border-left: 2px solid color-mix(in srgb, var(--signal) 45%, transparent); }
+.groups-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+.layers-group { display: flex; align-items: center; gap: 2px; background: color-mix(in srgb, var(--signal) 10%, var(--elev-2)); border: 1px solid var(--line); border-radius: var(--r-control); padding: 3px 5px; }
+.layers-group[data-on="true"] { border-color: color-mix(in srgb, var(--signal) 55%, transparent); box-shadow: var(--accent-glow); }
+.layers-group .grip { color: var(--signal); cursor: default; }
 .grip { display: inline-grid; place-items: center; width: 16px; flex-shrink: 0; color: var(--text-3); cursor: grab; }
 .grip:active { cursor: grabbing; }
 .layers li:hover .grip { color: var(--text-1); }
