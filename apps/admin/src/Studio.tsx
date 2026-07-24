@@ -193,9 +193,13 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           ))}
         </div>
         <div className="spacer" />
-        <select className="variant" value={variantId ?? ""} onChange={(e) => setVariantId(Number(e.target.value))} title="Garment color (preview)">
-          {colors.map((v) => <option key={v.id} value={v.id}>{v.color ?? `Variant ${v.id}`}</option>)}
-        </select>
+        <div className="garment-colors" title="Garment color">
+          {colors.map((v) => (
+            <button key={v.id} className="gsw" data-on={v.id === variantId}
+              style={{ background: v.colorCode ?? "#888" }}
+              title={v.color ?? `Variant ${v.id}`} onClick={() => setVariantId(v.id)} />
+          ))}
+        </div>
         <span className="hint">{status}</span>
         <button className="cta" onClick={save}><Icon name="check" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Save</button>
       </div>
