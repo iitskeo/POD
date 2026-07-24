@@ -43,6 +43,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [toast, setToast] = useState<{ msg: string; action?: { label: string; fn: () => void } } | null>(null);
   const [coachOff, setCoachOff] = useState(() => getList("dismissed").includes("coach.canvas"));
+  const [tourOff, setTourOff] = useState(() => getList("dismissed").includes("tour"));
   const toastTimer = useRef<number>(0);
   const loadedRef = useRef(false);
   const notify = (msg: string, action?: { label: string; fn: () => void }) => {
@@ -549,6 +550,36 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           {toast.action && <button className="toast-action" onClick={() => { toast.action!.fn(); setToast(null); }}>{toast.action.label}</button>}
         </div>
       )}
+      {!tourOff && <StudioTour onClose={() => { toggleFav("dismissed", "tour"); setTourOff(true); }} />}
+    </div>
+  );
+}
+
+/** First-run tour (spec §13) — a short overlay on first entry to the studio. */
+function StudioTour({ onClose }: { onClose: () => void }) {
+  const STEPS = [
+    { title: "Welcome to the Studio", body: "Design your product on a living canvas. Here's a 20-second tour — skip anytime." },
+    { title: "The canvas", body: "Zoom with Ctrl/Cmd-scroll, pan by holding Space and dragging, and switch garment colours from the top bar. Toggle rulers & grid from the zoom control." },
+    { title: "Add anything", body: "The icon rail on the left switches panels: add text or a background, browse the icon library, drop in your graphics, or start from a template. Drag a graphic straight onto the canvas." },
+    { title: "Direct manipulation", body: "Drag to move, use the eight handles to resize, and the floating toolbar for quick actions. Smart guides and spacing badges keep everything aligned. Cmd/Ctrl+Z undoes anything." },
+    { title: "It saves itself", body: "Changes autosave as you work. Mark any element “customer can change” to turn it into a slot. Pricing and publishing live in My Products." },
+  ];
+  const [i, setI] = useState(0);
+  const step = STEPS[i], last = i === STEPS.length - 1;
+  return (
+    <div className="tour-backdrop">
+      <div className="tour-card">
+        <span className="eyebrow">Step {i + 1} of {STEPS.length}</span>
+        <h3>{step.title}</h3>
+        <p className="hint">{step.body}</p>
+        <div className="tour-dots">{STEPS.map((_, j) => <span key={j} data-on={j === i || undefined} />)}</div>
+        <div className="tour-actions">
+          <button className="btn ghost" onClick={onClose}>Skip</button>
+          <div className="spacer" />
+          {i > 0 && <button className="btn" onClick={() => setI(i - 1)}>Back</button>}
+          <button className="cta" onClick={() => (last ? onClose() : setI(i + 1))}>{last ? "Start designing" : "Next"}</button>
+        </div>
+      </div>
     </div>
   );
 }

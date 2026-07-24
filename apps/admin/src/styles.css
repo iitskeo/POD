@@ -370,6 +370,16 @@ input[type="color"] { padding: 3px; height: 34px; }
 .toast-action { background: none; border: 0; color: var(--signal); font-family: var(--body); font-weight: 600; font-size: var(--t-13); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
 .toast-action:hover { background: var(--accent-weak); }
 
+/* First-run tour (spec §13). */
+.tour-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 70; padding: var(--s5); animation: fade var(--m-std) var(--ease-out); }
+.tour-card { width: min(440px, 96vw); background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-modal); padding: var(--s6); display: flex; flex-direction: column; gap: var(--s3); box-shadow: var(--shadow-3), var(--highlight); animation: pop var(--m-panel) var(--ease-out); }
+.tour-card h3 { font-family: var(--display); font-size: var(--t-20); font-weight: 600; }
+.tour-card .hint { font-size: var(--t-13); line-height: 1.65; }
+.tour-dots { display: flex; gap: 6px; margin: var(--s1) 0; }
+.tour-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--elev-3); }
+.tour-dots span[data-on="true"] { background: var(--signal); }
+.tour-actions { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); }
+
 /* Skeletons (spec §14). */
 .sk { display: block; border-radius: var(--r-control); background: linear-gradient(90deg, var(--elev-1) 25%, var(--elev-2) 37%, var(--elev-1) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
 .sk-line { height: 14px; }
