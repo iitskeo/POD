@@ -203,6 +203,8 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 .mini.file { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 6px; }
 .quick-list { display: flex; flex-direction: column; gap: var(--s1); }
 .btn.sm { padding: 7px 10px; font-size: var(--t-12); text-align: left; }
+.btn.pairing { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1.2; }
+.btn.pairing .hint { font-size: var(--t-11); }
 .dupsel { width: 30px; padding: 4px; font-size: var(--t-12); background: var(--elev-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text-2); cursor: pointer; }
 .align-bar { display: flex; align-items: center; gap: 2px; padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--elev-2); box-shadow: var(--highlight); }
 .align-bar .eyebrow { margin: 0 var(--s2) 0 var(--s1); }

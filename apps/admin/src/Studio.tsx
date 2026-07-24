@@ -325,6 +325,25 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     else els = [mk({ content: "NICE", font: "Righteous", outline: { color: "#FFFFFF", width: 16 }, shadow: { color: "#00000055", blur: 12, dx: 5, dy: 5 } })];
     hist.commit((e) => [...e, ...els]); setSelectedIds(els.map((x) => x.id));
   };
+
+  // Curated heading+body font pairings applied in one click (spec §9.1).
+  const PAIRINGS = [
+    { name: "Editorial", heading: "Playfair Display", body: "Inter" },
+    { name: "Modern", heading: "Montserrat", body: "Inter" },
+    { name: "Impact", heading: "Anton", body: "Archivo" },
+    { name: "Friendly", heading: "Poppins", body: "Lora" },
+  ];
+  const applyPairing = (p: { heading: string; body: string }) => {
+    const sp = placement.printSpec;
+    const base = (over: Partial<TextElement>): TextElement => ({
+      id: uid(), kind: "text", placement: active, z: nextZ(), content: "Text", font: "Inter",
+      color: "#0A0A0A", align: "center", maxLines: 2, minSizeFrac: 0.05, maxChars: 24, editable: false,
+      rect: centerRect(Math.round(sp.widthPx * 0.7), Math.round(sp.heightPx * 0.15)), ...over,
+    });
+    const heading = base({ content: "Heading", font: p.heading, weight: 700, rect: { x: Math.round(sp.widthPx * 0.12), y: Math.round(sp.heightPx * 0.33), w: Math.round(sp.widthPx * 0.76), h: Math.round(sp.heightPx * 0.17) } });
+    const body = base({ content: "your supporting line", font: p.body, weight: 400, rect: { x: Math.round(sp.widthPx * 0.18), y: Math.round(sp.heightPx * 0.52), w: Math.round(sp.widthPx * 0.64), h: Math.round(sp.heightPx * 0.08) } });
+    hist.commit((e) => [...e, heading, body]); setSelectedIds([heading.id, body.id]);
+  };
   const dismissCoach = () => { toggleFav("dismissed", "coach.canvas"); setCoachOff(true); };
 
   const saveQuick = async () => {
@@ -406,6 +425,13 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
                 <>
                   <span className="eyebrow">Start from a template</span>
                   <div className="quick-list">{TEMPLATES.map((t) => <button key={t.id} className="btn wide sm" onClick={() => applyTemplate(t.id)}>{t.name}</button>)}</div>
+                  <span className="eyebrow sub">Font pairings</span>
+                  <div className="quick-list">{PAIRINGS.map((p) => (
+                    <button key={p.name} className="btn wide sm pairing" onClick={() => applyPairing(p)}>
+                      <span style={{ fontFamily: `'${p.heading}'` }}>{p.name}</span>
+                      <span className="hint" style={{ fontFamily: `'${p.body}'` }}>{p.heading} + {p.body}</span>
+                    </button>
+                  ))}</div>
                   <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
                   <div className="quick-list">
                     {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
@@ -668,6 +694,14 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
       <div className="field row">
         <label><span className="hint">Arc °</span><input type="number" value={el.arc ?? 0} onChange={(e) => onChange({ arc: Number(e.target.value) })} /></label>
         <label><span className="hint">Max lines</span><input type="number" value={el.maxLines} onChange={(e) => onChange({ maxLines: Math.max(1, Number(e.target.value)) })} /></label>
+      </div>
+      <div className="field"><span className="hint">Lockup</span>
+        <div className="preset-row">
+          <button className="preset" onClick={() => onChange({ arc: 0, maxLines: 1 })}>Flat</button>
+          <button className="preset" onClick={() => onChange({ arc: 0, maxLines: 3, lineHeight: 1 })}>Stacked</button>
+          <button className="preset" onClick={() => onChange({ arc: 120, maxLines: 1 })}>Arc up</button>
+          <button className="preset" onClick={() => onChange({ arc: -120, maxLines: 1 })}>Arc down</button>
+        </div>
       </div>
       <label className="check"><input type="checkbox" checked={!!el.outline} onChange={(e) => onChange({ outline: e.target.checked ? { color: "#0A0A0A", width: 6 } : undefined })} /> Outline</label>
       {el.outline && <div className="field row"><label><span className="hint">Outline color</span><input type="color" value={el.outline.color} onChange={(e) => onChange({ outline: { ...el.outline!, color: e.target.value } })} /></label><label><span className="hint">Width</span><input type="number" value={el.outline.width} onChange={(e) => onChange({ outline: { ...el.outline!, width: Number(e.target.value) } })} /></label></div>}
