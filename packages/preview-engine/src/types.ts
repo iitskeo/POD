@@ -44,6 +44,9 @@ export interface TextElement extends ElementBase {
   maxLines: number;
   minSizeFrac: number;
   maxChars: number;
+  weight?: number;                 // font weight (default 700)
+  case?: "upper" | "title" | "lower"; // letter-case transform at render time
+  lineHeight?: number;             // line-height multiplier (default 1.15)
   letterSpacing?: number;
   outline?: { color: string; width: number };
   shadow?: { color: string; blur: number; dx: number; dy: number };

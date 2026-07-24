@@ -608,9 +608,21 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
           ))}
         </div>
       </div>
+      <div className="field row">
+        <label><span className="hint">Weight</span><select value={el.weight ?? 700} onChange={(e) => onChange({ weight: Number(e.target.value) })}>
+          <option value={400}>Regular</option><option value={500}>Medium</option><option value={600}>Semibold</option><option value={700}>Bold</option><option value={800}>Extrabold</option>
+        </select></label>
+        <label><span className="hint">Case</span><select value={el.case ?? "none"} onChange={(e) => onChange({ case: e.target.value === "none" ? undefined : (e.target.value as TextElement["case"]) })}>
+          <option value="none">Aa Normal</option><option value="upper">UPPERCASE</option><option value="title">Title Case</option><option value="lower">lowercase</option>
+        </select></label>
+      </div>
       <ColorField label="Color" value={el.color} palette={COLORS} onChange={(color) => onChange({ color })} />
+      <TextEffectPresets el={el} onChange={onChange} />
       <div className="field row">
         <label><span className="hint">Letter spacing</span><input type="number" value={el.letterSpacing ?? 0} onChange={(e) => onChange({ letterSpacing: Number(e.target.value) })} /></label>
+        <label><span className="hint">Line height</span><input type="number" step="0.05" value={el.lineHeight ?? 1.15} onChange={(e) => onChange({ lineHeight: Number(e.target.value) })} /></label>
+      </div>
+      <div className="field row">
         <label><span className="hint">Arc °</span><input type="number" value={el.arc ?? 0} onChange={(e) => onChange({ arc: Number(e.target.value) })} /></label>
         <label><span className="hint">Max lines</span><input type="number" value={el.maxLines} onChange={(e) => onChange({ maxLines: Math.max(1, Number(e.target.value)) })} /></label>
       </div>
@@ -624,6 +636,33 @@ function TextProps({ el, onChange }: { el: TextElement; onChange: (p: Partial<Te
       {el.editable && <div className="field row"><label><span className="hint">Label</span><input value={el.textLabel ?? ""} onChange={(e) => onChange({ textLabel: e.target.value })} /></label><label><span className="hint">Max chars</span><input type="number" value={el.maxChars} onChange={(e) => onChange({ maxChars: Number(e.target.value) })} /></label></div>}
       <label className="check"><input type="checkbox" checked={!!el.colorSlot} onChange={(e) => onChange({ colorSlot: e.target.checked ? { label: "Text color", options: COLORS.slice(0, 4), default: el.color } : undefined })} /> Let the customer pick the text color</label>
       {el.colorSlot && <ColorSlotCfg options={el.colorSlot.options} def={el.colorSlot.default} onChange={(options, def) => onChange({ colorSlot: { ...el.colorSlot!, options, default: def } })} />}
+    </div>
+  );
+}
+
+/** One-click text-effect presets, sized to the element, then tweakable (spec §9.4). */
+function TextEffectPresets({ el, onChange }: { el: TextElement; onChange: (p: Partial<TextElement>) => void }) {
+  const h = el.rect.h;
+  const r = (frac: number, min: number) => Math.max(min, Math.round(h * frac));
+  const presets: { id: string; label: string; apply: Partial<TextElement> }[] = [
+    { id: "none", label: "None", apply: { outline: undefined, shadow: undefined } },
+    { id: "outline", label: "Outline", apply: { outline: { color: "#0A0A0A", width: r(0.03, 3) }, shadow: undefined } },
+    { id: "sticker", label: "Sticker", apply: { outline: { color: "#FFFFFF", width: r(0.07, 6) }, shadow: { color: "#00000040", blur: r(0.03, 4), dx: 0, dy: r(0.02, 2) } } },
+    { id: "shadow", label: "Shadow", apply: { outline: undefined, shadow: { color: "#00000066", blur: r(0.04, 4), dx: r(0.02, 2), dy: r(0.02, 2) } } },
+    { id: "glow", label: "Glow", apply: { outline: undefined, shadow: { color: "#FF5A1FAA", blur: r(0.09, 8), dx: 0, dy: 0 } } },
+  ];
+  const active = !el.outline && !el.shadow ? "none"
+    : el.outline && el.outline.color.toUpperCase() === "#FFFFFF" ? "sticker"
+      : el.outline ? "outline"
+        : el.shadow && el.shadow.dx === 0 && el.shadow.dy === 0 ? "glow" : "shadow";
+  return (
+    <div className="field">
+      <span className="hint">Effect</span>
+      <div className="preset-row">
+        {presets.map((p) => (
+          <button key={p.id} className="preset" data-on={active === p.id || undefined} onClick={() => onChange(p.apply)}>{p.label}</button>
+        ))}
+      </div>
     </div>
   );
 }

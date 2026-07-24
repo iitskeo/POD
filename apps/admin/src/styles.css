@@ -267,6 +267,12 @@ input[type="color"] { padding: 3px; height: 34px; }
 .seg button:hover { color: var(--text-1); }
 .seg button[data-on="true"] { background: var(--elev-3); color: var(--signal); }
 
+/* Text-effect presets (spec §9.4). */
+.preset-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.preset { flex: 1 1 auto; min-width: 52px; padding: 7px 8px; background: var(--elev-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text-2); font-size: var(--t-12); cursor: pointer; transition: background var(--m-micro) var(--ease-out), color var(--m-micro) var(--ease-out); }
+.preset:hover { background: var(--elev-3); color: var(--text-1); }
+.preset[data-on="true"] { border-color: color-mix(in srgb, var(--signal) 55%, transparent); color: var(--signal); }
+
 /* Font picker (spec §9.1). */
 .fontpicker { position: relative; }
 .font-current { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 11px; background: var(--elev-2); border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text-1); font-size: var(--t-15, 15px); cursor: pointer; box-shadow: var(--highlight); }

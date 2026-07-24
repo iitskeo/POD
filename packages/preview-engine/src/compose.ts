@@ -22,20 +22,29 @@ export function recolorSvg(svg: string, part: string | undefined, color: string 
 
 interface Fitted { lines: string[]; size: number; overflow: boolean }
 
+/** Apply a letter-case transform at render time (the stored content is untouched). */
+export function applyCase(text: string, mode: TextElement["case"]): string {
+  if (mode === "upper") return text.toUpperCase();
+  if (mode === "lower") return text.toLowerCase();
+  if (mode === "title") return text.replace(/\b\p{L}[\p{L}']*/gu, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
+  return text;
+}
+
 /** Fit text into a box with a minimum legible size, wrapping to max lines. */
 export function fitText(
   ctx: CanvasRenderingContext2D, text: string, boxW: number, boxH: number,
-  el: Pick<TextElement, "font" | "maxLines" | "minSizeFrac" | "letterSpacing">, fileHeight: number,
+  el: Pick<TextElement, "font" | "maxLines" | "minSizeFrac" | "letterSpacing" | "weight" | "lineHeight">, fileHeight: number,
 ): Fitted {
   const minSize = Math.max(6, el.minSizeFrac * fileHeight);
+  const lh = el.lineHeight ?? 1.15;
   const measure = (lines: string[], size: number) => {
-    ctx.font = `700 ${size}px ${el.font}`;
+    ctx.font = `${el.weight ?? 700} ${size}px ${el.font}`;
     return Math.max(...lines.map((l) => ctx.measureText(l).width + (el.letterSpacing ?? 0) * Math.max(0, l.length - 1)));
   };
   for (let count = 1; count <= el.maxLines; count++) {
     const lines = wrap(text, count);
     if (lines.length !== count) continue;
-    for (let size = boxH / count; size >= minSize; size -= 1) {
+    for (let size = boxH / (count * lh); size >= minSize; size -= 1) {
       if (measure(lines, size) <= boxW) return { lines, size, overflow: false };
     }
   }
@@ -159,19 +168,21 @@ export async function renderArtwork(
         : el.source.assetId ? await resolver.graphic(el.source.assetId, el.color) : null;
       if (src) tilePattern(ctx, src, el.type, el.scale * scale, el.spacing * scale, W, H);
     } else if (el.kind === "text") {
-      const { content, color } = resolveText(el, values);
+      const resolved = resolveText(el, values);
+      const content = applyCase(resolved.content, el.case);
+      const color = resolved.color;
       if (content.trim()) {
         const fit = fitText(ctx, content, r.w, r.h, el, H);
         overflow = overflow || fit.overflow;
         ctx.fillStyle = color;
         ctx.textBaseline = "middle";
         ctx.textAlign = el.align;
-        ctx.font = `700 ${fit.size}px ${el.font}`;
+        ctx.font = `${el.weight ?? 700} ${fit.size}px ${el.font}`;
         const ax = el.align === "left" ? r.x : el.align === "right" ? r.x + r.w : r.x + r.w / 2;
         if (el.arc && el.arc !== 0) {
           drawArcText(ctx, fit.lines[0], r.x + r.w / 2, r.y + r.h / 2, fit.size, el.arc, el);
         } else {
-          const lineH = fit.size * 1.15;
+          const lineH = fit.size * (el.lineHeight ?? 1.15);
           const top = r.y + r.h / 2 - ((fit.lines.length - 1) * lineH) / 2;
           fit.lines.forEach((line, i) => drawStyledLine(ctx, line, ax, top + i * lineH, el));
         }
