@@ -29,6 +29,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dragLayer, setDragLayer] = useState<string | null>(null);
   const [overLayer, setOverLayer] = useState<string | null>(null);
+  const [panel, setPanel] = useState<"add" | "library" | "graphics" | "templates">("add");
   const selectId = (id: string) => setSelectedIds([id]);
   const clearSel = () => setSelectedIds([]);
   const selectOne = (id: string | null, additive?: boolean) => {
@@ -382,21 +383,37 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       </div>
 
       <div className="studio-grid">
-        <aside className="rail">
-          <span className="eyebrow">Add</span>
-          <button className="btn wide" onClick={addText}><Icon name="type" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Text</button>
-          <label className="btn wide file">Upload image<input type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => e.target.files?.[0] && addUpload(e.target.files[0])} /></label>
-          <button className="btn wide" onClick={addBackground}><Icon name="square" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Background fill</button>
-
-          <LibrarySearch onPick={importIcon} />
-
-          <GraphicsPanel graphics={graphics} onAdd={addGraphic} onUpload={addAssetFile} />
-
-          <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
-          <div className="quick-list">
-            {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
-            {quick.length === 0 && <p className="hint">None yet</p>}
-          </div>
+        <aside className="rail-shell">
+          <nav className="rail-icons">
+            <button className="rail-ico" data-on={panel === "add"} title="Add" onClick={() => setPanel("add")}><Icon name="plus" size={19} /></button>
+            <button className="rail-ico" data-on={panel === "library"} title="Shapes & icons library" onClick={() => setPanel("library")}><Icon name="search" size={19} /></button>
+            <button className="rail-ico" data-on={panel === "graphics"} title="My graphics" onClick={() => setPanel("graphics")}><Icon name="image" size={19} /></button>
+            <button className="rail-ico" data-on={panel === "templates"} title="Templates & quick designs" onClick={() => setPanel("templates")}><Icon name="grid" size={19} /></button>
+          </nav>
+          <div className="rail-body">
+            <div className="rail-panel">
+              {panel === "add" && (
+                <>
+                  <span className="eyebrow">Add</span>
+                  <button className="btn wide" onClick={addText}><Icon name="type" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Text</button>
+                  <label className="btn wide file">Upload image<input type="file" accept="image/png,image/jpeg,image/svg+xml" hidden onChange={(e) => e.target.files?.[0] && addUpload(e.target.files[0])} /></label>
+                  <button className="btn wide" onClick={addBackground}><Icon name="square" size={15} style={{ marginRight: 8, verticalAlign: "-2px" }} />Background fill</button>
+                </>
+              )}
+              {panel === "library" && <LibrarySearch onPick={importIcon} />}
+              {panel === "graphics" && <GraphicsPanel graphics={graphics} onAdd={addGraphic} onUpload={addAssetFile} />}
+              {panel === "templates" && (
+                <>
+                  <span className="eyebrow">Start from a template</span>
+                  <div className="quick-list">{TEMPLATES.map((t) => <button key={t.id} className="btn wide sm" onClick={() => applyTemplate(t.id)}>{t.name}</button>)}</div>
+                  <div className="section-head"><span className="eyebrow">Quick designs</span><button className="mini" title="Save this placement as a quick design" onClick={saveQuick}><Icon name="plus" size={15} /></button></div>
+                  <div className="quick-list">
+                    {quick.map((qd) => <button key={qd.id} className="btn wide sm" onClick={() => applyQuick(qd)}>{qd.name}</button>)}
+                    {quick.length === 0 && <p className="hint">None yet</p>}
+                  </div>
+                </>
+              )}
+            </div>
 
           <span className="eyebrow" style={{ marginTop: 14 }}>Layers</span>
           <ul className="layers">
@@ -421,6 +438,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
             ))}
             {countFor(active) === 0 && <li className="empty">No elements</li>}
           </ul>
+          </div>
         </aside>
 
         <main className="stage-wrap">

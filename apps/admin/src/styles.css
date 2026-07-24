@@ -105,10 +105,19 @@ input:focus, select:focus { border-color: color-mix(in srgb, var(--signal) 60%, 
 .gsw:hover { transform: scale(1.12); }
 .gsw[data-on="true"] { outline-color: var(--signal); }
 
-.studio-grid { display: grid; grid-template-columns: 248px 1fr 320px; gap: var(--s4); padding: var(--s4) var(--s5); align-items: start; }
+.studio-grid { display: grid; grid-template-columns: 300px 1fr 320px; gap: var(--s4); padding: var(--s4) var(--s5); align-items: start; }
 @media (max-width: 1180px) { .studio-grid { grid-template-columns: 1fr; } }
 
-.rail, .props { display: flex; flex-direction: column; gap: var(--s3); background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s4); box-shadow: var(--highlight); }
+.props { display: flex; flex-direction: column; gap: var(--s3); background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s4); box-shadow: var(--highlight); }
+
+/* Switchable panel rail (spec §7): icon rail + active panel, with Layers always below. */
+.rail-shell { display: flex; gap: var(--s2); align-items: flex-start; }
+.rail-icons { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; padding: 6px; background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--highlight); }
+.rail-ico { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; background: transparent; border: 1px solid transparent; border-radius: var(--r-control); color: var(--text-2); cursor: pointer; transition: background var(--m-micro) var(--ease-out), color var(--m-micro) var(--ease-out); }
+.rail-ico:hover { background: var(--elev-2); color: var(--text-1); }
+.rail-ico[data-on="true"] { background: var(--accent-weak); color: var(--signal); }
+.rail-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s3); background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s4); box-shadow: var(--highlight); }
+.rail-panel { display: flex; flex-direction: column; gap: var(--s3); }
 
 /* Provided library search (spec §4/§8) */
 .library { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s2); }
