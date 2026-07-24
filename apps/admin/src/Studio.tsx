@@ -5,7 +5,7 @@ import {
   type ImageElement, type PatternElement, type Placement, type Product, type Rect, type Slot,
   type SlotValues, type TextElement,
 } from "@abbiss/preview-engine";
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { api } from "./api";
 import { useHistory } from "./history";
 import { FontPicker } from "./FontPicker";
@@ -37,6 +37,16 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
   const [assets, setAssets] = useState<Asset[]>([]);
   const [quick, setQuick] = useState<{ id: string; name: string; elements: Element[] }[]>([]);
   const [offered, setOffered] = useState<string[] | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [toast, setToast] = useState<{ msg: string; action?: { label: string; fn: () => void } } | null>(null);
+  const [coachOff, setCoachOff] = useState(() => getList("dismissed").includes("coach.canvas"));
+  const toastTimer = useRef<number>(0);
+  const loadedRef = useRef(false);
+  const notify = (msg: string, action?: { label: string; fn: () => void }) => {
+    setToast({ msg, action });
+    clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 4500);
+  };
 
   useEffect(() => {
     (async () => {
@@ -46,6 +56,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
       setVariantId(p.externalVariantId ? Number(p.externalVariantId) : p.variants[0]?.id ?? null);
       setOffered(p.offeredVariantColors);
       if (d) hist.reset(d.elements);
+      loadedRef.current = true;
     })().catch((e) => setStatus(String(e.message ?? e)));
     api.listAssets().then(setAssets).catch(() => {});
     api.listQuickDesigns().then(setQuick).catch(() => {});
@@ -75,7 +86,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
 
   const update = (id: string, patch: Partial<Element>) =>
     hist.commit((els) => els.map((e) => (e.id === id ? ({ ...e, ...patch } as Element) : e)), `prop:${id}`);
-  const remove = (id: string) => { hist.commit((els) => els.filter((e) => e.id !== id)); clearSel(); };
+  const remove = (id: string) => { hist.commit((els) => els.filter((e) => e.id !== id)); clearSel(); notify("Element deleted", { label: "Undo", fn: hist.undo }); };
   const uid = () => crypto.randomUUID().slice(0, 8);
   const nextZ = () => Math.max(0, ...elements.map((e) => e.z)) + 1;
   const centerRect = (w: number, h: number): Rect => {
@@ -196,7 +207,12 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     hist.set((els) => els.map((e) => { const u = updates.find((x) => x.id === e.id); return u ? ({ ...e, rect: u.rect } as Element) : e; }));
 
   // Selection-wide actions (spec §6.5/§6.6).
-  const removeSel = () => { if (!selectedIds.length) return; hist.commit((els) => els.filter((e) => !selectedIds.includes(e.id))); clearSel(); };
+  const removeSel = () => {
+    if (!selectedIds.length) return;
+    const n = selectedIds.length;
+    hist.commit((els) => els.filter((e) => !selectedIds.includes(e.id))); clearSel();
+    notify(n === 1 ? "Element deleted" : `${n} elements deleted`, { label: "Undo", fn: hist.undo });
+  };
   const duplicateSel = () => {
     if (!selectedIds.length) return;
     const copies = elements.filter((e) => selectedIds.includes(e.id)).map((e, i) => ({ ...e, id: uid(), z: nextZ() + i, rect: { ...e.rect, x: e.rect.x + 40, y: e.rect.y + 40 } } as Element));
@@ -252,16 +268,47 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds, elements, placement, active]);
 
-  const save = async () => {
+  const persist = async () => {
     if (!product) return;
-    setStatus("Saving…");
+    setSaveState("saving");
     try {
       await api.saveDesign({ id: `design-${productId}`, productId, name: product.name, status: product.status ?? "draft", elements });
       const up = await api.patchProduct(productId, { offeredVariantColors: offered });
       setProduct(up);
-      setStatus("Saved");
-    } catch (e) { setStatus(`Error: ${e instanceof Error ? e.message : e}`); }
+      setSaveState("saved");
+    } catch (e) { setSaveState("error"); setStatus(`Error: ${e instanceof Error ? e.message : e}`); }
   };
+  // Autosave (spec §14): debounce changes; the manual Save button stays for reassurance.
+  useEffect(() => {
+    if (!loadedRef.current || !product) return;
+    const t = setTimeout(() => { persist(); }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elements, offered]);
+
+  // Start-from-template seeds (spec §13). Fully editable once applied.
+  const TEMPLATES = [
+    { id: "statement", name: "Big statement" },
+    { id: "stacked", name: "Stacked headline" },
+    { id: "sticker", name: "Sticker pop" },
+  ];
+  const applyTemplate = (id: string) => {
+    const sp = placement.printSpec;
+    const mk = (p: Partial<TextElement>): TextElement => ({
+      id: uid(), kind: "text", placement: active, z: nextZ(), content: "Text", font: "Space Grotesk",
+      color: "#0A0A0A", align: "center", maxLines: 2, minSizeFrac: 0.05, maxChars: 20, editable: false,
+      rect: centerRect(Math.round(sp.widthPx * 0.75), Math.round(sp.heightPx * 0.18)), ...p,
+    });
+    let els: Element[] = [];
+    if (id === "statement") els = [mk({ content: "BOLD", font: "Anton", rect: centerRect(Math.round(sp.widthPx * 0.82), Math.round(sp.heightPx * 0.22)) })];
+    else if (id === "stacked") els = [
+      mk({ content: "HEADLINE", font: "Bebas Neue", rect: { x: Math.round(sp.widthPx * 0.12), y: Math.round(sp.heightPx * 0.34), w: Math.round(sp.widthPx * 0.76), h: Math.round(sp.heightPx * 0.16) } }),
+      mk({ content: "your subheading here", font: "Inter", rect: { x: Math.round(sp.widthPx * 0.18), y: Math.round(sp.heightPx * 0.52), w: Math.round(sp.widthPx * 0.64), h: Math.round(sp.heightPx * 0.08) } }),
+    ];
+    else els = [mk({ content: "NICE", font: "Righteous", outline: { color: "#FFFFFF", width: 16 }, shadow: { color: "#00000055", blur: 12, dx: 5, dy: 5 } })];
+    hist.commit((e) => [...e, ...els]); setSelectedIds(els.map((x) => x.id));
+  };
+  const dismissCoach = () => { toggleFav("dismissed", "coach.canvas"); setCoachOff(true); };
 
   const saveQuick = async () => {
     const els = elements.filter((e) => e.placement === active);
@@ -275,7 +322,7 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
     hist.commit((e) => [...e, ...cloned]);
   };
 
-  if (!product || !placement) return <p className="hint pad">Loading…</p>;
+  if (!product || !placement) return <StudioSkeleton />;
   const countFor = (pl: string) => elements.filter((e) => e.placement === pl).length;
   const otherPlacements = placements.map((p) => p.placement).filter((p) => p !== active);
   const colors = product.variants.filter((v, i, a) => a.findIndex((x) => x.color === v.color) === i);
@@ -314,8 +361,8 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           <button className="icon-btn" title="Undo (Cmd/Ctrl+Z)" disabled={!hist.canUndo} onClick={hist.undo}><Icon name="undo-2" size={17} /></button>
           <button className="icon-btn" title="Redo (Shift+Cmd/Ctrl+Z)" disabled={!hist.canRedo} onClick={hist.redo}><Icon name="redo-2" size={17} /></button>
         </div>
-        <span className="hint">{status}</span>
-        <button className="cta" onClick={save}><Icon name="check" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Save</button>
+        <span className="hint save-state" data-s={saveState}>{status || (saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "")}</span>
+        <button className="cta" onClick={persist}><Icon name="check" size={15} style={{ marginRight: 6, verticalAlign: "-2px" }} />Save</button>
       </div>
 
       <div className="studio-grid">
@@ -374,9 +421,25 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
               </>}
             </div>
           )}
-          <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
-            mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={setSelectedIds}
-            onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} onDropAsset={onDropAsset} />
+          <div className="stage-stack">
+            <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
+              mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={setSelectedIds}
+              onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} onDropAsset={onDropAsset} />
+            {countFor(active) === 0 && (
+              <div className="canvas-empty">
+                <h3>Start designing “{active}”</h3>
+                <p className="hint">Pick a template to move fast, or start from a blank canvas.</p>
+                <div className="tpl-row">{TEMPLATES.map((t) => <button key={t.id} className="btn" onClick={() => applyTemplate(t.id)}>{t.name}</button>)}</div>
+                <button className="btn ghost" onClick={addText}>Start blank</button>
+              </div>
+            )}
+            {selected && !coachOff && (
+              <div className="coach">
+                <span>Drag a corner to resize · hold <b>Shift</b> to free-scale · drag a box on empty canvas to multi-select</span>
+                <button className="mini" title="Got it" onClick={dismissCoach}><Icon name="x" size={14} /></button>
+              </div>
+            )}
+          </div>
           <p className="hint">Anything outside the light area isn't printed. Shift-click or drag a box to select several. Live preview = flat design-on-template; photoreal mockups are generated when you publish.</p>
         </main>
 
@@ -410,6 +473,27 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
             <p className="hint">{offered === null ? "All colors offered" : `${offered.length} offered`}</p>
           </div>
         </aside>
+      </div>
+
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast.msg}</span>
+          {toast.action && <button className="toast-action" onClick={() => { toast.action!.fn(); setToast(null); }}>{toast.action.label}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Loading skeleton for the studio (spec §14) — never a frozen empty frame. */
+function StudioSkeleton() {
+  return (
+    <div className="studio">
+      <div className="studio-bar"><span className="sk sk-line" style={{ width: 160 }} /><div className="spacer" /><span className="sk sk-line" style={{ width: 90 }} /></div>
+      <div className="studio-grid">
+        <aside className="rail">{Array.from({ length: 5 }).map((_, i) => <span key={i} className="sk sk-block" />)}</aside>
+        <main className="stage-wrap"><div className="sk sk-stage" /></main>
+        <aside className="props">{Array.from({ length: 4 }).map((_, i) => <span key={i} className="sk sk-block" />)}</aside>
       </div>
     </div>
   );

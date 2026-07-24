@@ -297,5 +297,51 @@ input[type="color"] { padding: 3px; height: 34px; }
 .asset-cell:hover .star, .asset-cell .star[data-on="true"] { opacity: 1; }
 .eyebrow.sub { margin-top: 8px; }
 
+/* Save indicator (spec §14). */
+.save-state[data-s="saving"] { color: var(--text-2); }
+.save-state[data-s="saved"] { color: var(--ok); }
+.save-state[data-s="error"] { color: var(--danger); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn.ghost:hover { background: var(--elev-2); color: var(--text-1); }
+
+/* Guided empty state + coach tip on the canvas (spec §13). */
+.stage-stack { position: relative; }
+.canvas-empty {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: var(--s3); text-align: center;
+  padding: var(--s6) var(--s7); border: 1px solid var(--line); border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--elev-2) 90%, transparent); backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-3), var(--highlight); animation: fade var(--m-panel) var(--ease-out);
+}
+.canvas-empty h3 { font-family: var(--display); font-size: var(--t-16); font-weight: 600; }
+.tpl-row { display: flex; gap: var(--s2); flex-wrap: wrap; justify-content: center; }
+.coach {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
+  display: flex; align-items: center; gap: var(--s2); max-width: 90%;
+  padding: 7px 8px 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--elev-3); box-shadow: var(--shadow-2), var(--highlight);
+  font-size: var(--t-12); color: var(--text-2); animation: fade var(--m-panel) var(--ease-out);
+}
+.coach b { color: var(--text-1); font-weight: 600; }
+
+/* Toast with undo (spec §14). */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 60;
+  display: flex; align-items: center; gap: var(--s4); padding: 11px 12px 11px 18px;
+  background: var(--elev-3); border: 1px solid var(--line); border-radius: var(--r-control);
+  box-shadow: var(--shadow-3), var(--highlight); font-size: var(--t-13); color: var(--text-1);
+  animation: toast-in var(--m-panel) var(--ease-out);
+}
+.toast-action { background: none; border: 0; color: var(--signal); font-family: var(--body); font-weight: 600; font-size: var(--t-13); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.toast-action:hover { background: var(--accent-weak); }
+
+/* Skeletons (spec §14). */
+.sk { display: block; border-radius: var(--r-control); background: linear-gradient(90deg, var(--elev-1) 25%, var(--elev-2) 37%, var(--elev-1) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+.sk-line { height: 14px; }
+.sk-block { height: 44px; margin-bottom: 4px; }
+.sk-stage { height: min(72vh, 720px); border-radius: var(--r-card); }
+
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
