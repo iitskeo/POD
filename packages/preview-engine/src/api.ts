@@ -93,8 +93,24 @@ export class ApiClient {
     if (!res.ok) throw new Error(`Print file upload failed (${res.status})`);
     return res.json();
   }
-  mockup(productId: string, files: Array<{ placement: string; printFileUrl: string }>) {
-    return this.req<string[]>("/api/mockup", { method: "POST", body: JSON.stringify({ productId, files }) });
+  /**
+   * Generate Printful mockups as an async job: start the task, then poll its status
+   * with short requests so neither the Worker nor the browser fetch times out.
+   */
+  async mockup(
+    productId: string,
+    files: Array<{ placement: string; printFileUrl: string }>,
+    onProgress?: (attempt: number) => void,
+  ): Promise<string[]> {
+    const { taskId } = await this.req<{ taskId: string }>("/api/mockup", { method: "POST", body: JSON.stringify({ productId, files }) });
+    for (let attempt = 0; attempt < 150; attempt++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const s = await this.req<{ status: string; urls?: string[]; error?: string }>(`/api/mockup?task=${encodeURIComponent(taskId)}`);
+      onProgress?.(attempt);
+      if (s.status === "completed") return s.urls ?? [];
+      if (s.status === "failed") throw new Error(s.error ?? "Mockup generation failed");
+    }
+    throw new Error("Mockup generation is taking too long — please try again");
   }
 
   // Orders

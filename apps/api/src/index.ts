@@ -235,21 +235,25 @@ async function renderMockup(
     }],
   });
 
+  // Async job: return the task id immediately; the client polls GET /api/mockup?task=id.
+  // This keeps every request short so neither the Worker nor the browser fetch times out.
   const id = Array.isArray(task) ? task[0].id : task.id;
-  for (let i = 0; i < 25; i++) {
-    await new Promise((r) => setTimeout(r, 1500));
-    const res = await call<{ data?: MockupTask[] | MockupTask }>(env, store, `/v2/mockup-tasks?id=${id}`);
-    const raw = res.data ?? res;
-    const t = (Array.isArray(raw) ? raw[0] : raw) as MockupTask;
-    if (t.status === "failed") {
-      return json({ error: t.failure_reasons?.join("; ") ?? "Printful failed" }, { status: 422 }, headers);
-    }
-    if (t.status === "completed") {
-      const urls = (t.catalog_variant_mockups ?? []).flatMap((v) => v.mockups.map((m) => m.mockup_url));
-      return json(urls, {}, headers);
-    }
+  return json({ taskId: id }, {}, headers);
+}
+
+/** One status check for a mockup task (the client polls this). */
+async function pollMockup(env: Env, store: StoreRow, taskId: string, headers: HeadersInit): Promise<Response> {
+  const res = await call<{ data?: MockupTask[] | MockupTask }>(env, store, `/v2/mockup-tasks?id=${taskId}`);
+  const raw = res.data ?? res;
+  const t = (Array.isArray(raw) ? raw[0] : raw) as MockupTask;
+  if (t.status === "failed") {
+    return json({ status: "failed", error: t.failure_reasons?.join("; ") ?? "Printful failed" }, {}, headers);
   }
-  return json({ error: "Printful took too long" }, { status: 504 }, headers);
+  if (t.status === "completed") {
+    const urls = (t.catalog_variant_mockups ?? []).flatMap((v) => v.mockups.map((m) => m.mockup_url));
+    return json({ status: "completed", urls }, {}, headers);
+  }
+  return json({ status: "pending" }, {}, headers);
 }
 
 // ---- Helpers -------------------------------------------------------------------
@@ -481,11 +485,18 @@ export default {
         return json({ id: row.id, reference: row.reference, status: row.status, email: row.email, subtotalCents: row.subtotal_cents, currency: row.currency }, {}, headers);
       }
 
-      // Mockup (public, rate-limited in spirit)
+      // Mockups. POST starts the async Printful task; GET polls its status.
       if (path === "/api/mockup" && req.method === "POST") {
         const store = await currentStore(env);
         if (!store) return json({ error: "Printful is not connected" }, { status: 409 }, headers);
         return renderMockup(env, store, await req.json(), headers);
+      }
+      if (path === "/api/mockup" && req.method === "GET") {
+        const store = await currentStore(env);
+        if (!store) return json({ error: "Printful is not connected" }, { status: 409 }, headers);
+        const taskId = url.searchParams.get("task");
+        if (!taskId) return json({ error: "Missing task id" }, { status: 400 }, headers);
+        return pollMockup(env, store, taskId, headers);
       }
 
       // Products
