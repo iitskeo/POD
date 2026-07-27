@@ -104,14 +104,16 @@ export class ApiClient {
     onProgress?: (attempt: number) => void,
   ): Promise<string[]> {
     const { taskId } = await this.req<{ taskId: string }>("/api/mockup", { method: "POST", body: JSON.stringify({ productId, files }) });
-    for (let attempt = 0; attempt < 150; attempt++) {
+    // ~3 min ceiling. If Printful is still not done, the caller offers "publish without
+    // mockups" so the owner is never stuck waiting (some products mock up slowly or not at all).
+    for (let attempt = 0; attempt < 90; attempt++) {
       await new Promise((r) => setTimeout(r, 2000));
       const s = await this.req<{ status: string; urls?: string[]; error?: string }>(`/api/mockup?task=${encodeURIComponent(taskId)}`);
       onProgress?.(attempt);
       if (s.status === "completed") return s.urls ?? [];
       if (s.status === "failed") throw new Error(s.error ?? "Mockup generation failed");
     }
-    throw new Error("Mockup generation is taking too long — please try again");
+    throw new Error("Printful is taking too long on this product. You can publish without mockups and add them later.");
   }
 
   // Orders

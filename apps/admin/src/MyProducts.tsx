@@ -60,7 +60,10 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
             <button className="btn" onClick={() => setEditing(p)}>Edit</button>
             <button className="btn" onClick={() => onDesign(p.id)}>Design</button>
             {p.status === "published"
-              ? <button className="btn" onClick={() => unpublish(p)}>Unpublish</button>
+              ? <>
+                  <button className="btn" onClick={() => setPublishing(p)}>Mockups</button>
+                  <button className="btn" onClick={() => unpublish(p)}>Unpublish</button>
+                </>
               : <button className="cta" onClick={() => setPublishing(p)}>Publish</button>}
           </div>
         ))}
@@ -121,6 +124,7 @@ function PublishModal({ product, onClose, onPublished }: {
   const [generated, setGenerated] = useState<string[]>([]);
   const [featured, setFeatured] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let stop = false;
@@ -150,7 +154,19 @@ function PublishModal({ product, onClose, onPublished }: {
       } finally { clearInterval(tick); }
     })();
     return () => { stop = true; clearInterval(tick); };
-  }, [product.id]);
+  }, [product.id, attempt]);
+
+  // Escape hatch: publish immediately without mockups so a slow/unsupported product never
+  // blocks the owner. Mockups can be generated later from the product's "Mockups" action.
+  const publishWithout = async () => {
+    setError(""); setPhase("saving");
+    try { onPublished(await api.patchProduct(product.id, { status: "published" })); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setPhase("gen"); }
+  };
+  const retry = () => {
+    setError(""); setGenerated([]); setFeatured([]); setElapsed(0);
+    setPhase("gen"); setAttempt((a) => a + 1);
+  };
 
   const toggle = (url: string) => {
     setFeatured((f) => f.includes(url) ? f.filter((u) => u !== url) : (f.length < MAX_MOCKUPS ? [...f, url] : f));
@@ -179,7 +195,23 @@ function PublishModal({ product, onClose, onPublished }: {
         {error && <p className="hint warn">{error}</p>}
 
         {phase === "gen" && !error && (
-          <p className="hint">Generating realistic mockups with Printful… {elapsed}s</p>
+          <>
+            <p className="hint">Generating realistic mockups with Printful… {elapsed}s</p>
+            <div className="modal-actions">
+              <div className="spacer" />
+              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn" onClick={publishWithout}>Publish without mockups</button>
+            </div>
+          </>
+        )}
+
+        {error && generated.length === 0 && phase !== "saving" && (
+          <div className="modal-actions">
+            <div className="spacer" />
+            <button className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn" onClick={retry}>Retry</button>
+            <button className="cta" onClick={publishWithout}>Publish without mockups</button>
+          </div>
         )}
 
         {phase !== "gen" && generated.length > 0 && (

@@ -218,8 +218,17 @@ async function renderMockup(
   const techniqueOf = (placement: string) =>
     styleList.find((s) => s.placement === placement)?.technique ?? "dtg";
 
-  if (!variantId || styleIds.length === 0) {
-    return json({ error: "Missing a mockup style or variant" }, { status: 422 }, headers);
+  if (!variantId) {
+    return json({ error: "This product has no selected variant to mock up." }, { status: 422 }, headers);
+  }
+  if (styleIds.length === 0) {
+    // All-over / cut-sew / knitting products often expose no mockup styles for their
+    // placements. Fail fast with the reason instead of creating a task that never completes.
+    const placements = [...new Set(body.files.map((f) => f.placement))].join(", ");
+    const techniques = [...new Set(body.files.map((f) => techniqueOf(f.placement)))].join(", ");
+    return json({
+      error: `Printful has no mockup style for this product (placements: ${placements}; technique: ${techniques}). It can't be auto-mocked — publish without mockups.`,
+    }, { status: 422 }, headers);
   }
 
   const task = await createMockupTask(env, store, {
