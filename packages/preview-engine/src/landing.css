@@ -1,0 +1,93 @@
+/* Landing (My Store) — one renderer, both apps (docs/pod/08). Light-forward like the
+   storefront (spec 03 §1); in the admin editor it previews exactly what the shopper sees.
+   Editor-only chrome (.editing) never shows on the live store. */
+
+.landing { background: var(--bone); color: var(--ink); }
+.landing section { position: relative; }
+
+/* Hero */
+.landing .lp-hero {
+  display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center;
+  padding: clamp(56px, 11vw, 128px) 24px; background: var(--surface); border-bottom: 1px solid var(--mist);
+}
+.landing .lp-hero[style*="url"], .landing .lp-hero[style*="background:"] { color: var(--ink); }
+.landing .lp-title {
+  font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; line-height: 1.02;
+  font-size: clamp(2.2rem, 6vw, 3.6rem);
+}
+.landing .lp-sub { max-width: 560px; color: var(--muted); font-size: 1.05rem; line-height: 1.6; }
+.landing .lp-hero .cta { margin-top: 8px; text-decoration: none; display: inline-flex; }
+
+/* Product blocks (featured / grid) */
+.landing .lp-block { max-width: 1120px; margin: 0 auto; padding: clamp(36px, 6vw, 80px) 24px; }
+.landing .lp-h {
+  font-family: var(--display); font-weight: 800; letter-spacing: -0.01em;
+  font-size: clamp(1.35rem, 3vw, 2rem); margin-bottom: 24px;
+}
+.landing .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 20px; }
+.landing .card {
+  display: block; text-decoration: none; color: inherit; background: var(--surface);
+  border: 1px solid var(--mist); border-radius: var(--r-card); overflow: hidden;
+  transition: transform var(--m-std, 200ms) var(--ease-out, ease), box-shadow var(--m-std, 200ms) var(--ease-out, ease);
+}
+.landing .card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08); }
+.landing .card-img { aspect-ratio: 1; display: grid; place-items: center; background: var(--surface); border-bottom: 1px solid var(--mist); }
+.landing .card-img img { width: 100%; height: 100%; object-fit: contain; }
+.landing .card-img .ph { width: 100%; height: 100%; background: var(--mist); }
+.landing .card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.landing .card-body h3 { font-family: var(--display); font-weight: 600; font-size: 0.98rem; }
+.landing .card-body .price { font-size: 0.82rem; color: var(--muted); }
+
+/* Story (optional image beside text) */
+.landing .lp-story {
+  max-width: 1120px; margin: 0 auto; padding: clamp(36px, 6vw, 80px) 24px;
+  display: grid; gap: 28px; align-items: center;
+}
+.landing .lp-story-img img { width: 100%; border-radius: var(--r-card); display: block; }
+.landing .lp-body { color: var(--muted); line-height: 1.75; font-size: 1.05rem; max-width: 62ch; }
+@media (min-width: 760px) {
+  .landing .lp-story { grid-template-columns: 1fr 1fr; }
+  .landing .lp-story.side-right .lp-story-img { order: 2; }
+}
+
+/* ---- Editor chrome (admin only, .editing) ------------------------------------ */
+.landing.editing .lp-wrap { outline: 1px dashed transparent; transition: outline-color 120ms ease; cursor: default; }
+.landing.editing .lp-wrap:hover { outline-color: color-mix(in srgb, var(--signal) 45%, transparent); }
+.landing.editing .lp-wrap.sel { outline: 2px solid var(--signal); outline-offset: -2px; }
+
+.landing.editing .lp-editable { cursor: text; border-radius: 4px; }
+.landing.editing .lp-editable:empty::before { content: attr(data-ph); opacity: 0.4; }
+.landing.editing .lp-editable:focus { outline: 2px solid color-mix(in srgb, var(--signal) 55%, transparent); outline-offset: 3px; }
+
+.landing.editing .lp-tools {
+  position: absolute; top: 8px; right: 8px; z-index: 6; display: none; gap: 2px;
+  padding: 3px; background: rgba(18, 18, 20, 0.92); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+.landing.editing .lp-wrap:hover > .lp-tools, .landing.editing .lp-wrap.sel > .lp-tools { display: flex; }
+.landing.editing .lp-tools .tb-btn {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; cursor: pointer;
+  background: transparent; border: 0; border-radius: 6px; color: #f3f3f0;
+}
+.landing.editing .lp-tools .tb-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.landing.editing .lp-tools .tb-btn.danger:hover { background: rgba(248, 113, 113, 0.28); color: #fff; }
+
+/* Control panel is admin chrome (dark) sitting over the light landing preview. */
+.landing.editing .lp-ctl {
+  position: relative; z-index: 6; margin: 12px auto 0; max-width: 640px;
+  background: var(--elev-2, #1d1d22); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow-2, 0 12px 30px rgba(0, 0, 0, 0.4)); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 12px; text-align: left; color: var(--text-1, #f5f5f2);
+}
+
+/* "+ Add block" affordance between sections */
+.landing.editing .lp-add { position: relative; height: 14px; display: grid; place-items: center; }
+.landing.editing .lp-add-menu {
+  display: none; align-items: center; gap: 4px; padding: 4px 6px; background: var(--ink); color: var(--bone);
+  border-radius: 999px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25); z-index: 6;
+}
+.landing.editing .lp-wrap:hover > .lp-add .lp-add-menu { display: inline-flex; }
+.landing.editing .lp-add-menu button {
+  background: transparent; border: 0; color: var(--bone); font-family: var(--body); font-size: 12px;
+  padding: 4px 8px; border-radius: 999px; cursor: pointer;
+}
+.landing.editing .lp-add-menu button:hover { background: rgba(255, 255, 255, 0.16); }

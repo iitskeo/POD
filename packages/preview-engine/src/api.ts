@@ -1,4 +1,4 @@
-import type { Asset, Design, Element, Product } from "./types";
+import type { Asset, Design, Element, LandingConfig, Product } from "./types";
 
 export interface ImportResult { productId: string; designId: string }
 
@@ -57,6 +57,14 @@ export class ApiClient {
   }) {
     return this.req<Product>(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
   }
+  deleteProduct(id: string) { return this.req<void>(`/api/products/${id}`, { method: "DELETE" }); }
+
+  // Landing (My Store)
+  getLanding() { return this.req<{ config: LandingConfig | null }>("/api/landing"); }
+  saveLanding(config: LandingConfig) {
+    return this.req<{ ok: boolean }>("/api/landing", { method: "PUT", body: JSON.stringify({ config }) });
+  }
+  publishLanding() { return this.req<{ ok: boolean }>("/api/landing/publish", { method: "POST" }); }
   designForProduct(productId: string) { return this.req<Design>(`/api/designs/product/${productId}`); }
   saveDesign(d: { id: string; productId: string; name: string; status: string; elements: Element[] }) {
     return this.req<Design>(`/api/designs/${d.id}`, { method: "PUT", body: JSON.stringify(d) });

@@ -510,6 +510,31 @@ export default {
         return pollMockup(env, store, taskId, headers);
       }
 
+      // Landing (My Store). Public gets the published config (or default); admin gets the draft.
+      if (path === "/api/landing" && req.method === "GET") {
+        const row = await env.DB.prepare("SELECT draft, published FROM landing WHERE id = 'default'")
+          .first<{ draft: string | null; published: string | null }>();
+        const raw = (await authed()) ? (row?.draft ?? row?.published) : row?.published;
+        return json({ config: raw ? JSON.parse(raw) : null }, {}, headers);
+      }
+      if (path === "/api/landing" && req.method === "PUT") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const body = (await req.json()) as { config: unknown };
+        await env.DB.prepare(
+          "INSERT INTO landing (id, draft, updated_at) VALUES ('default', ?1, ?2) " +
+          "ON CONFLICT(id) DO UPDATE SET draft = ?1, updated_at = ?2",
+        ).bind(JSON.stringify(body.config), Date.now()).run();
+        return json({ ok: true }, {}, headers);
+      }
+      if (path === "/api/landing/publish" && req.method === "POST") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const row = await env.DB.prepare("SELECT draft FROM landing WHERE id = 'default'")
+          .first<{ draft: string | null }>();
+        await env.DB.prepare("UPDATE landing SET published = ?1, updated_at = ?2 WHERE id = 'default'")
+          .bind(row?.draft ?? null, Date.now()).run();
+        return json({ ok: true }, {}, headers);
+      }
+
       // Products
       if (path === "/api/products" && req.method === "GET") {
         const showAll = await authed();
@@ -572,6 +597,23 @@ export default {
         }
         const row = await env.DB.prepare("SELECT * FROM products WHERE id = ?").bind(prodId[1]).first<ProductRow>();
         return json(rowToProduct(row!), {}, headers);
+      }
+      if (prodId && req.method === "DELETE") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const cur = await env.DB.prepare("SELECT id, status, photo_key FROM products WHERE id = ?")
+          .bind(prodId[1]).first<{ id: string; status: string; photo_key: string | null }>();
+        if (!cur) return new Response(null, { status: 204, headers });
+        // A live product can never be deleted in one click (docs/pod/08 §1).
+        if (cur.status === "published") return json({ error: "Unpublish it first" }, { status: 409 }, headers);
+        await env.DB.prepare("DELETE FROM designs WHERE product_id = ?").bind(prodId[1]).run();
+        await env.DB.prepare("DELETE FROM products WHERE id = ?").bind(prodId[1]).run();
+        // Best-effort R2 cleanup: the base photo + this product's generated print files.
+        if (cur.photo_key) await env.BUCKET.delete(cur.photo_key).catch(() => {});
+        const listed = await env.BUCKET.list({ prefix: `print-files/pub-${prodId[1]}-` }).catch(() => null);
+        if (listed && listed.objects.length) {
+          await env.BUCKET.delete(listed.objects.map((o) => o.key)).catch(() => {});
+        }
+        return new Response(null, { status: 204, headers });
       }
 
       // Designs

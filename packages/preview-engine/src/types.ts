@@ -142,6 +142,23 @@ export interface Design {
   elements: Element[];
 }
 
+// ---- Landing page (My Store) — docs/pod/08-my-store.md -------------------------
+
+/** A call-to-action: an in-page anchor ("#products") or a product ("/p/{slug}"). */
+export interface LandingCta { label: string; target: string }
+
+export type LandingSection =
+  | { id: string; type: "hero"; eyebrow: string; title: string; subtitle: string;
+      cta: LandingCta; background: { imageId: string | null; color: string | null } }
+  | { id: string; type: "featured"; title: string; productIds: string[] }
+  | { id: string; type: "grid"; title: string }
+  | { id: string; type: "story"; title: string; body: string;
+      imageId: string | null; side: "left" | "right" };
+
+export type LandingSectionType = LandingSection["type"];
+
+export interface LandingConfig { version: number; sections: LandingSection[] }
+
 /** An owner graphic in the library. */
 export interface Asset {
   id: string;
