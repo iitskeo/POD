@@ -52,7 +52,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 
 /* Login */
 .login { display: grid; place-items: center; height: 100vh; }
-.login-card { display: flex; flex-direction: column; gap: var(--s3); width: 320px; padding: var(--s7); border: 1px solid var(--line); border-radius: var(--r-card); background: var(--elev-1); box-shadow: var(--shadow-2), var(--highlight); text-align: center; }
+.login-card { display: flex; flex-direction: column; gap: var(--s3); width: 320px; padding: var(--s7); border: 1px solid var(--line); border-radius: var(--r-card); background: var(--sheen), var(--elev-1); box-shadow: var(--shadow-3), var(--highlight); text-align: center; }
 .login-card .eyebrow { text-align: left; }
 
 /* Top bar */
@@ -96,7 +96,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 /* App shell + sidebar (spec §2) */
 .admin-shell { display: flex; min-height: 100vh; }
 .admin-main { flex: 1; min-width: 0; }
-.sidebar { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: var(--s2); padding: var(--s5) var(--s3); border-right: 1px solid var(--line); background: var(--elev-1); }
+.sidebar { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: var(--s2); padding: var(--s5) var(--s3); border-right: 1px solid var(--line); background: var(--sheen), var(--elev-1); box-shadow: var(--highlight); }
 .sidebar .brand { padding: var(--s1) var(--s2) var(--s4); }
 .side-nav { display: flex; flex-direction: column; gap: 2px; }
 .side-link { display: flex; align-items: center; gap: var(--s3); background: none; border: 1px solid transparent; border-radius: var(--r-control); color: var(--text-2); font-family: var(--body); font-size: var(--t-13); font-weight: 500; text-align: left; padding: 10px 11px; cursor: pointer; text-decoration: none; transition: background var(--m-micro) var(--ease-out), color var(--m-micro) var(--ease-out); }
@@ -108,7 +108,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 
 /* Studio */
 .studio { display: flex; flex-direction: column; min-height: 100vh; }
-.studio-bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5); border-bottom: 1px solid var(--line); background: var(--elev-1); flex-wrap: wrap; }
+.studio-bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5); border-bottom: 1px solid var(--line); background: var(--sheen), var(--elev-1); box-shadow: var(--shadow-1); position: relative; z-index: 2; flex-wrap: wrap; }
 .cname { font-family: var(--display); font-size: var(--t-14); font-weight: 600; }
 .placement-tabs { display: flex; gap: 3px; padding: 3px; background: var(--elev-2); border-radius: var(--r-control); }
 .placement-tabs button { text-transform: none; letter-spacing: 0; font-size: var(--t-13); padding: 6px 12px; }
@@ -123,15 +123,15 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 .studio-grid { display: grid; grid-template-columns: 300px 1fr 320px; gap: var(--s4); padding: var(--s4) var(--s5); align-items: start; }
 @media (max-width: 1180px) { .studio-grid { grid-template-columns: 1fr; } }
 
-.props { display: flex; flex-direction: column; gap: var(--s3); background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s4); box-shadow: var(--highlight); }
+.props { display: flex; flex-direction: column; gap: var(--s3); background: var(--sheen), var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s4); box-shadow: var(--shadow-1), var(--highlight); }
 
 /* Switchable panel rail (spec §7): icon rail + active panel, with Layers always below. */
 .rail-shell { display: flex; gap: var(--s2); align-items: flex-start; }
-.rail-icons { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; padding: 6px; background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--highlight); }
+.rail-icons { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; padding: 6px; background: var(--sheen), var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-1), var(--highlight); }
 .rail-ico { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; background: transparent; border: 1px solid transparent; border-radius: var(--r-control); color: var(--text-2); cursor: pointer; transition: background var(--m-micro) var(--ease-out), color var(--m-micro) var(--ease-out); }
 .rail-ico:hover { background: var(--elev-2); color: var(--text-1); }
 .rail-ico[data-on="true"] { background: var(--accent-weak); color: var(--signal); }
-.rail-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s3); background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s4); box-shadow: var(--highlight); }
+.rail-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s3); background: var(--sheen), var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s4); box-shadow: var(--shadow-1), var(--highlight); }
 .rail-panel { display: flex; flex-direction: column; gap: var(--s3); }
 
 /* Provided library search (spec §4/§8) */
@@ -166,7 +166,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bo
 
 /* Publish modal + mockup picker (spec §15) */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.62); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 50; padding: var(--s5); animation: fade var(--m-std) var(--ease-out); }
-.modal { width: min(720px, 96vw); max-height: 88vh; overflow-y: auto; background: var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-modal); padding: var(--s5); display: flex; flex-direction: column; gap: var(--s3); box-shadow: var(--shadow-3), var(--highlight); animation: pop var(--m-panel) var(--ease-out); }
+.modal { width: min(720px, 96vw); max-height: 88vh; overflow-y: auto; background: var(--sheen), var(--elev-1); border: 1px solid var(--line); border-radius: var(--r-modal); padding: var(--s5); display: flex; flex-direction: column; gap: var(--s3); box-shadow: var(--shadow-3), var(--highlight); animation: pop var(--m-panel) var(--ease-out); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; }
 .modal-head strong { font-family: var(--display); font-size: var(--t-16); }
 .modal-actions { display: flex; align-items: center; gap: var(--s2); }
@@ -247,8 +247,11 @@ input[type="color"] { padding: 3px; height: 34px; }
   overflow: hidden;
   border-radius: var(--r-card);
   border: 1px solid var(--line);
+  /* Faint print-craft halftone behind the product (03 §2.3) + a soft top-lit wash, so the
+     stage reads as a considered surface, not a flat black void. Never behind text. */
   background:
-    radial-gradient(130% 100% at 50% -10%, color-mix(in srgb, var(--bone) 7%, transparent), transparent 62%),
+    radial-gradient(circle, color-mix(in srgb, var(--bone) 4%, transparent) 1px, transparent 1.5px) 0 0 / 22px 22px,
+    radial-gradient(130% 100% at 50% -10%, color-mix(in srgb, var(--bone) 8%, transparent), transparent 62%),
     var(--bg);
   display: grid;
   place-items: center;
@@ -281,8 +284,8 @@ input[type="color"] { padding: 3px; height: 34px; }
 .zoom-lvl:hover { background: var(--elev-2); }
 
 /* Rulers & soft grid (spec §5, P1). */
-.grid-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; background-image: linear-gradient(to right, rgba(127, 127, 127, 0.28) 1px, transparent 1px), linear-gradient(to bottom, rgba(127, 127, 127, 0.28) 1px, transparent 1px); background-size: 10% 10%; }
-.ruler { position: absolute; font-family: var(--mono); font-size: 9px; color: var(--signal); background: color-mix(in srgb, var(--bg) 68%, transparent); padding: 0 3px; border-radius: 3px; pointer-events: none; z-index: 3; white-space: nowrap; transform-origin: center; }
+.grid-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; background-image: linear-gradient(to right, color-mix(in srgb, var(--bone) 10%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--bone) 10%, transparent) 1px, transparent 1px); background-size: 10% 10%; }
+.ruler { position: absolute; font-family: var(--mono); font-size: var(--t-11); color: var(--signal); background: color-mix(in srgb, var(--bg) 68%, transparent); padding: 0 3px; border-radius: 3px; pointer-events: none; z-index: 3; white-space: nowrap; transform-origin: center; }
 .ruler.rx { top: 2px; }
 .ruler.ry { left: 2px; }
 
@@ -290,7 +293,7 @@ input[type="color"] { padding: 3px; height: 34px; }
 .marquee { position: absolute; border: 1px solid var(--signal); background: color-mix(in srgb, var(--signal) 12%, transparent); pointer-events: none; z-index: 3; }
 .align-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--line); }
 .guide { position: absolute; background: var(--signal); pointer-events: none; z-index: 3; }
-.space-badge { position: absolute; padding: 1px 5px; background: var(--signal); color: var(--ink); font-family: var(--mono); font-size: 10px; font-weight: 600; border-radius: 4px; pointer-events: none; z-index: 4; white-space: nowrap; transform-origin: center; }
+.space-badge { position: absolute; padding: 1px 5px; background: var(--signal); color: var(--ink); font-family: var(--mono); font-size: var(--t-11); font-weight: 600; border-radius: 4px; pointer-events: none; z-index: 4; white-space: nowrap; transform-origin: center; }
 .guide.gx { top: 0; bottom: 0; width: 1px; transform: translateX(-0.5px); }
 .guide.gy { left: 0; right: 0; height: 1px; transform: translateY(-0.5px); }
 
