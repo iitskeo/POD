@@ -91,6 +91,18 @@ export function Customizer({ slug }: { slug: string }) {
         </div>
         <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize" />
         <p className="hint">Live preview — this is what prints.</p>
+
+        {(product.mockups?.featured?.length ?? 0) > 0 && (
+          <div className="cz-real">
+            <span className="eyebrow">On the product</span>
+            <div className="mockup-row">
+              {product.mockups!.featured.map((url, i) => (
+                <img key={url} src={url} alt={`${product.name} ${i + 1}`} loading="lazy" />
+              ))}
+            </div>
+            <p className="hint">Realistic product photos. Your exact design shows in the live preview above.</p>
+          </div>
+        )}
       </div>
 
       <aside className="cz-controls">

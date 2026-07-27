@@ -69,6 +69,7 @@ input:focus, select:focus { border-color: var(--signal); }
 .tile img { width: 100%; height: 100%; object-fit: contain; }
 .mockup-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .mockup-row img { width: 180px; border: 1px solid var(--line); border-radius: 3px; }
+.cz-real { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
 .buy { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
 /* Mobile: Add to cart sticks to the bottom (spec 5.4). */
 @media (max-width: 900px) {
