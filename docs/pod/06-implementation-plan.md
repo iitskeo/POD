@@ -1,8 +1,10 @@
 # Abbiss POD — Implementation Plan
 
-- **Document:** 6 of 6 (Implementation Plan)
-- **Status:** Approved for build
+- **Document:** 6 of 7 (Implementation Plan)
+- **Status:** Approved for build. **M4 (admin editor) is re-scoped by `07-admin-editor.md`**
+  around its P0/P1/P2 phases — see §2 M4.
 - **Depends on:** 01–05
+- **Related:** 07-admin-editor.md
 
 ---
 
@@ -76,36 +78,49 @@
 - The harness renders a multi-placement sample; the full-res PNG matches the on-screen
   composition; slot changes reflect immediately.
 
-### M4 — Admin Composer (Design Maker), built step by step
-Each sub-step is independently demonstrable and builds toward a Printful Design
-Maker-class editor. They ship in order.
+### M4 — Admin Design Studio (re-scoped by `07-admin-editor.md`)
+The Composer is superseded by the **Design Studio** in 07. M4 is re-scoped around 07's
+**phases** (07 §17); each phase ships together and is driven in a real browser. The earlier
+M4.1–M4.10 sub-steps are folded into the phases below.
 
-- **M4.1 Stage & placements:** `PlacementStage` (author mode) with placement tabs and
-  **live garment-color / variant** switching (uses `variant_templates`). Select, move,
-  scale, rotate, align with snapping.
-- **M4.2 Text — basic:** add text; font, size, color; live compose.
-- **M4.3 Text — advanced:** letter spacing, outline, shadow, and arc/curve.
-- **M4.4 Uploads:** upload PNG/JPG/SVG (`POST /api/uploads`) as image elements, with
-  DPI/resolution warnings against the placement print size.
-- **M4.5 Layers:** layers panel — reorder, rename, hide/lock, duplicate, and
-  **duplicate-to-placement**.
-- **M4.6 Graphics library:** owner graphics (`assets`) with categories; upload, browse,
-  place; recolor parts.
-- **M4.7 Quick designs:** save/apply owner premade element combos (`quick_designs`).
-- **M4.8 All-over:** seamless **pattern tool** (half drop / block / brick / reflect /
-  line) with scale/spacing/color, plus **background fill** per placement.
-- **M4.9 Slot exposure:** per-element toggle to expose text (editable), color-choice, or
-  graphic-choice slots with defaults and options; set retail price; `PUT /api/designs`;
-  publish/unpublish.
-- **M4.10 Realistic mockups:** generate per-placement print files → `POST /api/mockup` →
-  poll → show across placements.
+**P0 — the premium bar (ships together; anything missing still reads "cheap"):**
+- **Design language** (07 §1): dark-premium skin — elevation ladder, type/space/depth scale,
+  line-icon set, component kit, motion primitives (`preview-engine/tokens.css` `.theme-dark`
+  + `apps/admin/src/styles.css`).
+- **Living canvas** (07 §5): large staged canvas, zoom/pan, **live garment color**, elegant
+  print area, soft contact shadow.
+- **Direct manipulation** (07 §6): select/multi-select, marquee, **smart guides + snapping**,
+  contextual floating toolbar, keyboard shortcuts, align/distribute, and **undo/redo + a
+  visible history** (non-negotiable).
+- **Text system** (07 §9.1–§9.3): curated **font library** with live previews, core controls,
+  brand palette + full picker + eyedropper.
+- **Assets** (07 §7): drag-to-canvas, search, recents, favorites; provided library (07 §8,
+  Iconify whitelist + CC0 shapes).
+- **Customer slots** (07 §12): one-gesture slot creation + the first-class "what the customer
+  fills" panel; owner-curated offered colors.
+- **Onboarding & feedback** (07 §13–§14): guided empty states, autosave, toasts with undo,
+  skeletons.
+- **Publishing & parity** (07 §15–§16): price/publish in **My Products**, mockups on publish;
+  the storefront customizer shares the engine.
+
+**P1 — depth & polish:** rulers/grid; font **pairings**; **gradient** fills; text effect
+**lockups**; image **filters**; first-run tour; recently-used everywhere; group as a named
+object; per-element opacity.
+
+**P2 — product refinements (owner feedback):** blank-by-default canvas; **async, resilient
+mockup generation** (start task → poll status, real progress); clamped panning; clean
+elements (no floating label); remove templates / quick-designs / font-pairings; library
+previews before search.
+
+**P-00 — deferred:** background removal; command palette (Cmd-K); brand-kit management; design
+versioning; collaboration; AI assists (auto-layout, suggest fonts/colors).
 
 **Acceptance (M4 overall)**
-- Author on a multi-placement product using text (styled), an upload, a library graphic,
-  a quick design, an all-over pattern, and a background; manage layers incl.
-  duplicate-to-placement; switch garment color live; expose each slot type; set a price
-  and publish; the realistic mockup renders; unpublish hides it. Every sub-step (M4.1–
-  M4.10) is verified as it lands.
+- The full **P0** bar ships together and is driven in a real browser: author on a
+  multi-placement product with styled text, an upload, a library graphic, live garment-color
+  switching, smart-guide placement, and **undo/redo**; expose each slot type via the "what the
+  customer fills" panel; **price and publish from My Products**; mockups render on publish;
+  the storefront customizer matches the studio preview. P1/P2 land on top as above.
 
 ### M5 — Storefront Catalog & Product Detail
 **Scope**

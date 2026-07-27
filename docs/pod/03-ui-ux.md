@@ -1,9 +1,10 @@
 # Abbiss POD — UI/UX Specification
 
-- **Document:** 3 of 6 (UI/UX)
-- **Status:** Approved for build
+- **Document:** 3 of 7 (UI/UX)
+- **Status:** Approved for build. **The admin editor is superseded by `07-admin-editor.md`**
+  (the Design Studio) — see §6. Storefront sections (§5) are unchanged.
 - **Depends on:** 01-prd.md, 02-trd.md
-- **Related:** 04-flows.md
+- **Related:** 04-flows.md, 07-admin-editor.md
 
 ---
 
@@ -15,7 +16,10 @@ Editorial / industrial minimal with clean commercial touches. Abbiss identity, b
 - **Storefront:** light-forward. Off-white canvas, white cards, generous whitespace,
   large display type, a visible grid, one orange accent, monospaced micro-labels. Dark
   blocks are used sparingly for editorial emphasis (hero band, footer).
-- **Admin:** darker "industrial tool" surface (carbon) for a focused, utilitarian feel.
+- **Admin:** **superseded by `07-admin-editor.md §1` — dark *premium*** (Linear/Framer
+  grade), not a utilitarian carbon dev tool. The design-language system (elevation ladder,
+  type/space/depth scale, motion, component kit) lives in 07 §1 and
+  `preview-engine/tokens.css` (`.theme-dark`).
 - **One accent, always.** Signal orange marks the single most important action or state
   in any view — never two competing accents.
 
@@ -141,59 +145,53 @@ Add to cart sticks to the bottom.
 - Confirmation panel: "Your design is saved. Payments are coming soon — we'll email you
   when you can complete this order." Shows an order reference and the saved preview.
 
-## 6. Admin Screens (dark industrial tool)
+## 6. Admin Screens
+
+> **Superseded by `07-admin-editor.md`.** The admin is a **dark-premium Design Studio** with
+> a persistent **left sidebar** (not top tabs) and a **design vs. merchandising split**:
+> *Create Products* (design, no pricing) and *My Products* (price + publish). The sections
+> below cover the parts that still hold (login, import); the editor detail lives in 07.
 
 ### 6.1 Login
-- Centered card on carbon: single passphrase field + Enter. Error hint on failure.
-  Session persists via cookie across devices.
+- Centered card on the dark base: single passphrase field + Enter. Error hint on failure.
+  Session persists via cookie across devices. (Refined to the 07 §1 design language.)
 
-### 6.2 Top bar
-- Brand, section tabs (**Composer**, **Products**), current product selector, design
-  name field, save/publish actions, status hint.
+### 6.2 App shell & sidebar (07 §2)
+A persistent left **sidebar** — brand mark + three destinations, each a line icon + label
+with a clear active state:
+1. **My Store** — opens the live storefront in a new tab.
+2. **Create Products** — the Design Studio: import from Printful and design any imported
+   product. *No pricing here.*
+3. **My Products** — the catalog: retail price, review, publish/unpublish, and mockup
+   selection.
 
-### 6.3 Products / Import (one-click)
+The old top-bar section tabs (Composer / Products) and the global product selector are
+removed; each product opens into the studio from its card.
+
+### 6.3 Create Products — import & open (07 §3)
 - **Connect Printful** state (connected store name or a Connect button).
-- **Catalog browser:** searchable/filterable grid of Printful products (client-side
-  filter over the full catalog), each card with image, name, brand, and price-from.
-- **One-click Import:** a single **Import & Design** action on a product imports it
-  fully — **all placements and all variants** (color swatches + sizes), templates,
-  print-file sizes, and pricing — with **no manual image/URL step**, then routes straight
-  into the Composer for that product.
-- **Imported products list:** status (draft/published), quick links to edit or view.
+- **Catalog browser:** searchable/filterable grid of Printful products (client-side filter),
+  each a card with image, name, brand, and price-from.
+- **One-click Import & Design:** imports the product fully — **all placements and variants**
+  (swatches + sizes), templates, print-file sizes, pricing — with **no manual image/URL
+  step**, then opens the studio. A guided **empty state** front-loads the first import.
+- **Your products:** imported drafts + published as cards; click to open in the studio.
 
-### 6.4 Composer — Design Maker (three zones)
-A Printful Design Maker-class authoring surface, owner-only. Dark industrial tool skin.
+### 6.4 Design Studio (editor) — see `07-admin-editor.md`
+The Composer is replaced by the **Design Studio**, specified in full in `07-admin-editor.md`:
+the living canvas (07 §5); direct manipulation with **undo/redo**, smart guides and a
+floating toolbar (07 §6); text-as-craft (07 §9); image/color/brand palette (07 §10);
+placements (07 §11); variants + customer slots with the first-class "what the customer fills"
+panel (07 §12); onboarding (07 §13) and feedback/motion (07 §14). **Pricing and publishing
+are not in the studio.** Phasing (P0/P1/P2) is in 07 §17.
 
-**Top bar:** product name, **placement tabs** (Front / Back / sleeves…), **garment color
-/ variant switcher** (updates the base live), Save draft, Publish, and a **Mockups**
-action.
-
-**Left rail — Add & Layers:**
-- **Add:** Upload file, Add text, Graphics (owner library, by category), Quick designs
-  (owner premade combos), Pattern (all-over), Background fill.
-- **Layers:** list of elements on the active placement — drag to reorder, rename,
-  hide/lock, duplicate, and **duplicate to another placement**.
-
-**Center — Stage:**
-- `PlacementStage` in **author** mode: template photo for the active placement, print
-  area marked, artwork composited live. Move / scale / rotate / align with snapping
-  guides. A contextual **property bar** appears above the selected element.
-
-**Right — Properties (contextual to selection):**
-- **Text:** font, size, color, letter spacing, outline, shadow, arc/curve; plus slot
-  config (make editable, character limit, max lines, label).
-- **Graphic:** replace graphic; slot config (graphic-choice set + default); color-part
-  recolor options + default.
-- **Pattern:** pattern type (half drop / block / brick / reflect / line), scale, spacing,
-  color.
-- **Background:** color or graphic fill for the placement.
-- **Slot exposure:** a per-element "customer-editable" toggle turns a fixed element into
-  a slot of the matching type (text / color / graphic).
-- **Product:** retail price (USD); Publish / Save draft.
-
-**Graphics/Assets manager:** a section to upload and categorize the owner's graphics
-(SVG/PNG, with recolor parts) and to save **quick designs** for reuse. This library is
-owner content — it is not Printful's proprietary clipart.
+### 6.5 My Products — price, publish & mockups (07 §15)
+- Each product is a clean list row: photo, name, status pill, retail price field, and
+  design/edit links. The Printful **base price** shows beside the retail price.
+- **Publish** auto-generates realistic Printful mockups (up to 5) in a progress modal — no
+  manual "generate" button — then the owner **selects and orders** which to feature
+  Instagram-style (first = main, badge "1"; 1–5 total). The ordered set becomes the storefront
+  gallery. **Unpublish** hides the product (data retained).
 
 ## 7. Content & Microcopy Rules
 - All copy in **US English**.

@@ -1,8 +1,10 @@
 # Abbiss POD — Backend Schema & API Contract
 
-- **Document:** 5 of 6 (Backend Schema)
-- **Status:** Approved for build
+- **Document:** 5 of 7 (Backend Schema)
+- **Status:** Approved for build. Reconciled with `07-admin-editor.md` — `offered_variant_colors`
+  and product `mockups` are present; `brand_palette`/`templates` are deferred (07 §17 P-00).
 - **Depends on:** 02-trd.md
+- **Related:** 07-admin-editor.md
 - **Stack:** Cloudflare D1 (SQLite), R2, Workers. All identifiers English, snake_case.
 
 ---

@@ -481,18 +481,20 @@ minute."
 
 ---
 
-## 19. Reconciliation with other docs (to do)
+## 19. Reconciliation with other docs — DONE
 
-- `03-ui-ux.md §6` (admin screens) → replace §6.4 Composer detail with a pointer here; add the
-  sidebar nav, the design-language reference, and the My Products screen.
-- `04-flows.md` → admin flow: import → design (Create Products) → price/publish (My Products)
-  → mockups on publish.
-- `06-implementation-plan.md` → re-scope M4 around this doc's **phases**: P0 (premium bar), P1
-  (depth), P2 (power). Add the design-language, undo/redo, smart-guides, font-system and
-  templates work items explicitly.
-- `05-backend-schema.md` → already added: `products.offered_variant_colors`, product
-  `mockups` (generated + featured), the provided-library concept, and image `choiceSlot`.
-  Add (as needed by phase): a `brand_palette` / brand-kit concept and `templates`.
+- `03-ui-ux.md §6` (admin screens) → **done**: §6.4 Composer replaced with a pointer here;
+  added the sidebar nav (§6.2), the design-language reference (§1 + §6.4), and the My Products
+  screen (§6.5).
+- `04-flows.md` → **done**: admin flow §8 re-scoped to import → design (Create Products) →
+  price/publish (My Products) → mockups on publish; the customer/owner mockup sections (§1/§3)
+  point here (no customer mockup button; mockups auto-generate on publish).
+- `06-implementation-plan.md` → **done**: M4 re-scoped around this doc's **phases** P0/P1/P2,
+  with the design-language, undo/redo, smart-guides, font-system and templates work items
+  called out explicitly.
+- `05-backend-schema.md` → **done** (already added): `products.offered_variant_colors`, product
+  `mockups` (generated + featured), the provided-library concept, image `choiceSlot`. A
+  `brand_palette` / brand-kit and `templates` remain deferred (§17 P-00 / P2 removal).
 
 ---
 

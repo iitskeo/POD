@@ -1,9 +1,11 @@
 # Abbiss POD — Flows
 
-- **Document:** 4 of 6 (Flows)
-- **Status:** Approved for build
+- **Document:** 4 of 7 (Flows)
+- **Status:** Approved for build. **Admin editor flow superseded by `07-admin-editor.md`** —
+  the split is import → design (Create Products) → price/publish (My Products) → mockups on
+  publish (see §8).
 - **Depends on:** 01-prd.md, 02-trd.md, 03-ui-ux.md
-- **Related:** 05-backend-schema.md
+- **Related:** 05-backend-schema.md, 07-admin-editor.md
 
 All flows reflect the locked decisions: single brand, Printful only, guest checkout,
 payments and auto-fulfillment deferred ("coming soon"), curated slots, hybrid preview.
@@ -37,8 +39,10 @@ flowchart TD
 Rules enforced:
 - **Add to cart** is disabled until size and color are chosen and every text slot is
   within its limit.
-- The instant preview updates continuously; the realistic Printful mockup is optional and
-  explicitly on demand.
+- The instant preview updates continuously. **Per `07-admin-editor.md §16` there is no
+  customer "realistic preview" / mockup button** — the shopper relies on the real-time
+  living preview; the photoreal images are the owner-curated mockups from publish (§15). The
+  `E`/`F` mockup branch above is retained only for historical context.
 - No payment occurs. Reaching checkout (or using "Save my design & notify me") persists a
   **draft** order and captures the email.
 
@@ -57,7 +61,14 @@ sequenceDiagram
 
 No network call per edit. One engine renders both this preview and the print file.
 
-## 3. Realistic Mockup (on demand, hybrid)
+## 3. Realistic Mockup (superseded — now owner-only, on publish)
+
+> **Superseded by `07-admin-editor.md §15/§16`.** Mockups are no longer an on-demand button.
+> They **auto-generate when the owner publishes** (async job: start the Printful task →
+> return its id → the client polls a status endpoint with real progress) and the owner curates
+> which to feature. The **customer has no mockup button** (§16). The sequence below still
+> describes the underlying print-file → Printful task mechanics, now triggered by publish.
+
 
 ```mermaid
 sequenceDiagram
@@ -143,11 +154,15 @@ flowchart TD
 No manual image/URL picking and no per-variant repetition: one action imports the whole
 product and opens the editor.
 
-## 8. Admin Flow — Author Design (Design Maker), Expose Slots, Publish
+## 8. Admin Flow — Author Design (Design Studio), Expose Slots, Publish
+
+> **Superseded by `07-admin-editor.md`.** Design happens in **Create Products** (the Design
+> Studio; autosave, no pricing). **Price and publish move to My Products**, and **mockups
+> auto-generate on publish** (07 §15). The customer-slot model below is unchanged.
 
 ```mermaid
 flowchart TD
-  A[Composer on a product] --> P[Pick placement tab / garment color]
+  A[Design Studio on a product] --> P[Pick placement tab / garment color]
   P --> B{Add or edit an element}
   B --> B1[Upload file PNG/JPG/SVG]
   B --> B2[Add text: font, size, color, spacing, outline, shadow, arc]
@@ -168,13 +183,15 @@ flowchart TD
   S2 --> D
   S3 --> D
   FIX --> D
-  D{Check with realistic mockup?} -- yes --> E[Generate Printful mockup all placements] --> P
-  D -- no --> F[Set retail price USD]
-  F --> G[Save draft] --> H[Publish]
+  D[Autosave draft in the studio] --> MP[Open My Products]
+  MP --> F[Set retail price USD]
+  F --> H[Publish: auto-generate Printful mockups <=5, then pick + order featured]
   H --> I[Product visible + customizable in storefront]
 ```
 
-Unpublish reverses step H (product hidden from storefront, data retained).
+Pricing and publishing live in **My Products**, not the studio; the studio autosaves. Publish
+generates mockups automatically (07 §15). Unpublish reverses step H (product hidden from
+storefront, data retained).
 
 ## 8b. Pattern Tool (all-over)
 
