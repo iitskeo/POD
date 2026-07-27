@@ -12,6 +12,7 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
   const [status, setStatus] = useState("");
   const [publishing, setPublishing] = useState<Product | null>(null);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState<Product | null>(null);
 
   const load = () => api.listProducts().then(setProducts).catch((e) => setStatus(String(e.message ?? e)));
   useEffect(() => { load(); }, []);
@@ -31,6 +32,14 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
   const onPublished = (up: Product) => {
     setProducts((ps) => ps.map((x) => (x.id === up.id ? up : x)));
     setPublishing(null);
+  };
+
+  const remove = async (p: Product) => {
+    try {
+      await api.deleteProduct(p.id);
+      setProducts((ps) => ps.filter((x) => x.id !== p.id));
+    } catch (e) { setStatus(String((e as Error).message ?? e)); }
+    setDeleting(null);
   };
 
   return (
@@ -64,7 +73,10 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
                   <button className="btn" onClick={() => setPublishing(p)}>Mockups</button>
                   <button className="btn" onClick={() => unpublish(p)}>Unpublish</button>
                 </>
-              : <button className="cta" onClick={() => setPublishing(p)}>Publish</button>}
+              : <>
+                  <button className="cta" onClick={() => setPublishing(p)}>Publish</button>
+                  <button className="btn danger" title="Delete" onClick={() => setDeleting(p)}><Icon name="trash" size={16} /></button>
+                </>}
           </div>
         ))}
       </div>
@@ -72,6 +84,22 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
       {publishing && <PublishModal product={publishing} onClose={() => setPublishing(null)} onPublished={onPublished} />}
       {editing && <ProductEditModal product={editing} onClose={() => setEditing(null)}
         onSaved={(up) => { setProducts((ps) => ps.map((x) => (x.id === up.id ? up : x))); setEditing(null); }} />}
+      {deleting && (
+        <div className="modal-backdrop" onClick={() => setDeleting(null)}>
+          <div className="modal sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <strong>Delete product</strong>
+              <button className="mini" title="Close" onClick={() => setDeleting(null)}><Icon name="x" size={16} /></button>
+            </div>
+            <p className="hint">Delete "{deleting.name}"? This removes the product, its design and its photos. Existing orders keep their saved copy. This can't be undone.</p>
+            <div className="modal-actions">
+              <div className="spacer" />
+              <button className="btn" onClick={() => setDeleting(null)}>Cancel</button>
+              <button className="cta danger" onClick={() => remove(deleting)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

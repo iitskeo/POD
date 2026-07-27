@@ -361,6 +361,26 @@ input[type="color"] { padding: 3px; height: 34px; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
 .btn.ghost:hover { background: var(--elev-2); color: var(--text-1); }
 
+/* Destructive actions (delete product) */
+.btn.danger { color: var(--text-2); }
+.btn.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.cta.danger { background: var(--danger); border-color: var(--danger); color: #fff; box-shadow: none; }
+.cta.danger:hover:not(:disabled) { filter: brightness(1.05); }
+.modal.sm { width: min(460px, 94vw); }
+
+/* My Store — inline landing editor (docs/pod/08) */
+.store-editor { display: flex; flex-direction: column; height: 100vh; }
+.se-bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5); border-bottom: 1px solid var(--line); background: var(--sheen), var(--elev-1); box-shadow: var(--shadow-1); z-index: 2; }
+.se-canvas { flex: 1; overflow: auto; }
+.se-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 24%, transparent); }
+.se-field { display: flex; flex-direction: column; gap: 5px; }
+.se-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.se-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.se-pick { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--elev-3); color: var(--text-1); cursor: pointer; font-family: var(--body); font-size: var(--t-13); }
+.se-pick:hover { border-color: color-mix(in srgb, var(--bone) 24%, transparent); }
+.se-pick.on { border-color: var(--signal); }
+.se-num { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--signal); color: var(--ink); font-family: var(--mono); font-size: var(--t-11); font-weight: 700; }
+
 /* Coach tip on the canvas (spec §13). */
 .stage-stack { position: relative; }
 .coach {

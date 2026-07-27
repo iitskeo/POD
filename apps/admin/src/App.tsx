@@ -4,9 +4,11 @@ import { Login } from "./Login";
 import { Sidebar, type Dest } from "./Sidebar";
 import { CreateProducts } from "./CreateProducts";
 import { MyProducts } from "./MyProducts";
+import { StoreEditor } from "./StoreEditor";
 import { Studio } from "./Studio";
 
 type View =
+  | { name: "store" }
   | { name: "create" }
   | { name: "products" }
   | { name: "studio"; productId: string };
@@ -22,8 +24,9 @@ export function App() {
   if (authed === null) return <div className="boot">…</div>;
   if (!authed) return <Login onIn={() => setAuthed(true)} />;
 
-  const dest: Dest = view.name === "products" ? "products" : "create";
-  const go = (d: Dest) => setView(d === "products" ? { name: "products" } : { name: "create" });
+  const dest: Dest = view.name === "products" ? "products" : view.name === "store" ? "store" : "create";
+  const go = (d: Dest) =>
+    setView(d === "products" ? { name: "products" } : d === "store" ? { name: "store" } : { name: "create" });
 
   return (
     <div className="admin-shell">
@@ -31,6 +34,8 @@ export function App() {
       <div className="admin-main">
         {view.name === "studio" ? (
           <Studio productId={view.productId} onBack={() => setView({ name: "create" })} />
+        ) : view.name === "store" ? (
+          <StoreEditor />
         ) : view.name === "products" ? (
           <MyProducts onDesign={(productId) => setView({ name: "studio", productId })} />
         ) : (
