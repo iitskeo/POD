@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@abbiss/preview-engine/src/tokens.css";
+import "@abbiss/preview-engine/src/landing.css";
 import "./styles.css";
 import { App } from "./App";
 

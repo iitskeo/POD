@@ -1,38 +1,28 @@
 import { useEffect, useState } from "react";
-import type { Product } from "@abbiss/preview-engine";
+import { LandingView, DEFAULT_LANDING, type LandingConfig, type Product } from "@abbiss/preview-engine";
 import { api } from "./api";
 import { navigate } from "./App";
 
 export function Catalog() {
   const [products, setProducts] = useState<Product[] | null>(null);
+  const [config, setConfig] = useState<LandingConfig | null>(null);
 
-  useEffect(() => { api.listProducts().then(setProducts).catch(() => setProducts([])); }, []);
+  useEffect(() => {
+    api.listProducts().then(setProducts).catch(() => setProducts([]));
+    api.getLanding().then((r) => setConfig(r.config ?? DEFAULT_LANDING)).catch(() => setConfig(DEFAULT_LANDING));
+  }, []);
+
+  if (products === null || config === null) {
+    return <div className="grid pad">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="card skeleton" />)}</div>;
+  }
 
   return (
-    <div className="catalog">
-      <section className="hero">
-        <span className="eyebrow">Print on demand</span>
-        <h1>Make it yours.</h1>
-        <p className="lede">Personalize a product and see it on the real thing before you buy. No account needed.</p>
-      </section>
-
-      {products === null ? (
-        <div className="grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="card skeleton" />)}</div>
-      ) : products.length === 0 ? (
-        <p className="hint pad">No products published yet.</p>
-      ) : (
-        <div className="grid">
-          {products.map((p) => (
-            <a key={p.id} className="card" href={`/p/${p.slug}`} onClick={(e) => { e.preventDefault(); navigate(`/p/${p.slug}`); }}>
-              <div className="card-img">{p.hasPhoto ? <img src={api.productPhotoUrl(p.id)} alt={p.name} /> : <div className="ph" />}</div>
-              <div className="card-body">
-                <h3>{p.name}</h3>
-                <span className="mono price">from ${(p.retailPriceCents / 100).toFixed(2)}</span>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
+    <LandingView
+      config={config}
+      products={products}
+      photoUrl={(id) => api.productPhotoUrl(id)}
+      imageUrl={(id) => api.uploadUrl(id)}
+      onNavigate={navigate}
+    />
   );
 }
