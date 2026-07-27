@@ -3,6 +3,71 @@ import { renderArtwork, type Resolver } from "./compose";
 import { Icon } from "./icons";
 import type { Element, Placement, Rect, SlotValues } from "./types";
 
+/** How strongly the garment's folds/shadows show through a print (0 = flat sticker, 1 = full). */
+const FABRIC_STRENGTH = 0.55;
+
+// Garment photos are loaded once per URL for the fabric-shading pass. No crossOrigin: the
+// image only feeds the on-screen canvas (never exported), so a tainted canvas is fine.
+const garmentCache = new Map<string, HTMLImageElement | null>();
+const garmentPending = new Map<string, Promise<HTMLImageElement | null>>();
+function loadGarment(url: string): Promise<HTMLImageElement | null> {
+  if (garmentCache.has(url)) return Promise.resolve(garmentCache.get(url)!);
+  const existing = garmentPending.get(url);
+  if (existing) return existing;
+  const p = new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => { garmentCache.set(url, img); garmentPending.delete(url); resolve(img); };
+    img.onerror = () => { garmentCache.set(url, null); garmentPending.delete(url); resolve(null); };
+    img.src = url;
+  });
+  garmentPending.set(url, p);
+  return p;
+}
+
+/**
+ * Blend the just-rendered artwork with the garment's own shading so a print reads as
+ * fabric-printed, not a flat sticker: the garment's folds/shadows multiply onto the art,
+ * masked to the art's shape and desaturated so the garment colour never tints it. This is
+ * the client-side realism upgrade (real-time, both admin and customer, no mockups). It is
+ * preview-only — `renderPrintFilePng` composes on a separate canvas and stays clean.
+ */
+function applyFabricShading(
+  c: HTMLCanvasElement, garment: HTMLImageElement,
+  area: { left: number; top: number; width: number; height: number },
+) {
+  const iw = garment.naturalWidth, ih = garment.naturalHeight;
+  if (!iw || !ih || !c.width || !c.height) return;
+  const ctx = c.getContext("2d");
+  if (!ctx) return;
+  const sx = area.left * iw, sy = area.top * ih, sw = area.width * iw, sh = area.height * ih;
+
+  // Shade layer = the print-area region of the garment, desaturated and lifted so flat cloth
+  // reads ~white (multiply is a no-op) and only folds/shadows stay dark.
+  const shade = document.createElement("canvas");
+  shade.width = c.width; shade.height = c.height;
+  const sctx = shade.getContext("2d");
+  if (!sctx) return;
+  sctx.filter = "grayscale(1) brightness(1.5) contrast(1.15)";
+  sctx.drawImage(garment, sx, sy, sw, sh, 0, 0, c.width, c.height);
+
+  // Multiply the shade onto the art, then clip the result back to the art's own shape.
+  const out = document.createElement("canvas");
+  out.width = c.width; out.height = c.height;
+  const octx = out.getContext("2d");
+  if (!octx) return;
+  octx.drawImage(c, 0, 0);
+  octx.globalCompositeOperation = "multiply";
+  octx.globalAlpha = FABRIC_STRENGTH;
+  octx.drawImage(shade, 0, 0);
+  octx.globalAlpha = 1;
+  octx.globalCompositeOperation = "destination-in";
+  octx.drawImage(c, 0, 0);
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.drawImage(out, 0, 0);
+}
+
 const EDITOR_SCALE = 0.4;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const intersects = (a: Rect, b: Rect) =>
@@ -131,10 +196,14 @@ export function PlacementStage({
       const c = canvasRef.current;
       if (!c) return;
       const res = await renderArtwork(c, placement, elements, values, resolver, EDITOR_SCALE);
-      if (!stale) onOverflow?.(res.overflow);
+      if (stale) return;
+      onOverflow?.(res.overflow);
+      // Settle the print into the fabric (real-time realism; preview-only).
+      const garment = await loadGarment(placement.imageUrl);
+      if (!stale && garment && canvasRef.current === c) applyFabricShading(c, garment, area);
     })();
     return () => { stale = true; };
-  }, [placement, elements, values, resolver, onOverflow]);
+  }, [placement, elements, values, resolver, onOverflow, area]);
 
   const computeFit = () => {
     const vp = viewportRef.current;
