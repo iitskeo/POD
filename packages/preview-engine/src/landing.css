@@ -2,7 +2,9 @@
    storefront (spec 03 §1); in the admin editor it previews exactly what the shopper sees.
    Editor-only chrome (.editing) never shows on the live store. */
 
-.landing { background: var(--bone); color: var(--ink); }
+/* The landing is always light-forward (spec 03), even when the admin shell around the
+   editor is dark — so it uses stable light colors, not the theme-flipping --muted/--line. */
+.landing { background: var(--bone); color: var(--ink); --lp-muted: color-mix(in srgb, var(--ink) 55%, transparent); }
 .landing section { position: relative; }
 
 /* Hero */
@@ -15,7 +17,7 @@
   font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; line-height: 1.02;
   font-size: clamp(2.2rem, 6vw, 3.6rem);
 }
-.landing .lp-sub { max-width: 560px; color: var(--muted); font-size: 1.05rem; line-height: 1.6; }
+.landing .lp-sub { max-width: 560px; color: var(--lp-muted); font-size: 1.05rem; line-height: 1.6; }
 .landing .lp-hero .cta { margin-top: 8px; text-decoration: none; display: inline-flex; }
 
 /* Product blocks (featured / grid) */
@@ -36,7 +38,7 @@
 .landing .card-img .ph { width: 100%; height: 100%; background: var(--mist); }
 .landing .card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
 .landing .card-body h3 { font-family: var(--display); font-weight: 600; font-size: 0.98rem; }
-.landing .card-body .price { font-size: 0.82rem; color: var(--muted); }
+.landing .card-body .price { font-size: 0.82rem; color: var(--lp-muted); }
 
 /* Story (optional image beside text) */
 .landing .lp-story {
@@ -44,7 +46,7 @@
   display: grid; gap: 28px; align-items: center;
 }
 .landing .lp-story-img img { width: 100%; border-radius: var(--r-card); display: block; }
-.landing .lp-body { color: var(--muted); line-height: 1.75; font-size: 1.05rem; max-width: 62ch; }
+.landing .lp-body { color: var(--lp-muted); line-height: 1.75; font-size: 1.05rem; max-width: 62ch; }
 @media (min-width: 760px) {
   .landing .lp-story { grid-template-columns: 1fr 1fr; }
   .landing .lp-story.side-right .lp-story-img { order: 2; }
@@ -91,15 +93,28 @@
   display: flex; flex-direction: column; gap: 12px; text-align: left; color: var(--text-1, #f5f5f2);
 }
 
-/* "+ Add block" affordance between sections */
-.landing.editing .lp-add { position: relative; height: 14px; display: grid; place-items: center; }
-.landing.editing .lp-add-menu {
-  display: none; align-items: center; gap: 4px; padding: 4px 6px; background: var(--ink); color: var(--bone);
-  border-radius: 999px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25); z-index: 6;
+/* Add-section bar — always present (and the guided empty state at zero sections). */
+.landing.editing .lp-addbar {
+  display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
+  padding: 40px 24px; border-top: 1px dashed var(--mist);
 }
-.landing.editing .lp-wrap:hover > .lp-add .lp-add-menu { display: inline-flex; }
-.landing.editing .lp-add-menu button {
-  background: transparent; border: 0; color: var(--bone); font-family: var(--body); font-size: 12px;
-  padding: 4px 8px; border-radius: 999px; cursor: pointer;
+.landing.editing .lp-addbar.empty { min-height: 68vh; justify-content: center; gap: 12px; border-top: 0; }
+.landing.editing .lp-addbar-h { font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; font-size: clamp(1.8rem, 4vw, 2.6rem); color: var(--ink); }
+.landing.editing .lp-addbar-sub { color: var(--lp-muted); font-size: 1rem; margin-bottom: 6px; }
+.landing.editing .lp-addbar-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--lp-muted); }
+.landing.editing .lp-addbar .eyebrow { color: var(--lp-muted); }
+.landing.editing .lp-addbar-menu { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.landing.editing .lp-addbtn {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; width: 116px; padding: 18px 12px;
+  background: var(--surface); border: 1px solid var(--mist); border-radius: 16px; color: var(--ink);
+  font-family: var(--body); font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: transform 160ms var(--ease-out, ease), box-shadow 160ms var(--ease-out, ease), border-color 160ms ease;
 }
-.landing.editing .lp-add-menu button:hover { background: rgba(255, 255, 255, 0.16); }
+.landing.editing .lp-addbtn:hover {
+  transform: translateY(-3px); border-color: color-mix(in srgb, var(--signal) 55%, var(--mist));
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.12);
+}
+.landing.editing .lp-addbtn-ic {
+  display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px;
+  background: color-mix(in srgb, var(--signal) 12%, var(--bone)); color: var(--signal);
+}

@@ -68,9 +68,9 @@ export function StoreEditor() {
     if (selectedId === id) setSelectedId(null);
   };
 
-  const onAdd = (afterId: string, type: LandingSectionType) => {
+  const onAdd = (type: LandingSectionType) => {
     const s = newSection(type);
-    apply((secs) => { const i = secs.findIndex((x) => x.id === afterId); const c = secs.slice(); c.splice(i + 1, 0, s); return c; });
+    apply((secs) => [...secs, s]);
     setSelectedId(s.id);
   };
 

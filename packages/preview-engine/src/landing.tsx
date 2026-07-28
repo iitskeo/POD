@@ -43,7 +43,7 @@ export interface LandingEdit {
   /** Move the dragged block to before/after the target block. */
   onReorder: (dragId: string, targetId: string, after: boolean) => void;
   onRemove: (id: string) => void;
-  onAdd: (afterId: string, type: LandingSectionType) => void;
+  onAdd: (type: LandingSectionType) => void;
   /** Per-block non-text controls (image upload, product picker, CTA target) — admin-supplied. */
   renderControls: (section: LandingSection) => ReactNode;
 }
@@ -211,26 +211,41 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
             </div>
             {body}
             {sel && <div className="lp-ctl" onClick={(e) => e.stopPropagation()}>{edit!.renderControls(s)}</div>}
-            <AddBlock onAdd={(t) => edit!.onAdd(s.id, t)} />
           </div>
         );
       })}
+      {editing && <AddBar onAdd={edit!.onAdd} empty={config.sections.length === 0} />}
     </div>
   );
 }
 
-const BLOCKS: { type: LandingSectionType; label: string }[] = [
-  { type: "hero", label: "Hero" }, { type: "featured", label: "Featured" },
-  { type: "grid", label: "Product grid" }, { type: "story", label: "Story" },
+const BLOCKS: { type: LandingSectionType; label: string; icon: string }[] = [
+  { type: "hero", label: "Hero", icon: "square" },
+  { type: "featured", label: "Featured", icon: "star" },
+  { type: "grid", label: "Product grid", icon: "grid" },
+  { type: "story", label: "Story", icon: "type" },
 ];
 
-function AddBlock({ onAdd }: { onAdd: (t: LandingSectionType) => void }) {
+/** Always-present way to add a section (and the guided empty state at zero sections). */
+function AddBar({ onAdd, empty }: { onAdd: (t: LandingSectionType) => void; empty?: boolean }) {
   return (
-    <div className="lp-add" onClick={(e) => e.stopPropagation()}>
-      <span className="lp-add-line" />
-      <div className="lp-add-menu">
-        <Icon name="plus" size={14} />
-        {BLOCKS.map((b) => <button key={b.type} onClick={() => onAdd(b.type)}>{b.label}</button>)}
+    <div className={`lp-addbar${empty ? " empty" : ""}`} onClick={(e) => e.stopPropagation()}>
+      {empty ? (
+        <>
+          <span className="eyebrow">Your store</span>
+          <h2 className="lp-addbar-h">Build your page</h2>
+          <p className="lp-addbar-sub">Add a section to begin. Drag sections to reorder them.</p>
+        </>
+      ) : (
+        <span className="lp-addbar-label">Add a section</span>
+      )}
+      <div className="lp-addbar-menu">
+        {BLOCKS.map((b) => (
+          <button key={b.type} className="lp-addbtn" onClick={() => onAdd(b.type)}>
+            <span className="lp-addbtn-ic"><Icon name={b.icon} size={20} /></span>
+            <span>{b.label}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
