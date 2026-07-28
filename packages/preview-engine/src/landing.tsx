@@ -133,11 +133,11 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
     <div className={`landing${editing ? " editing" : ""}`}>
       {editing && (
         <div className="lp-siteheader">
-          <span className="lp-brandwrap" title="Click to rename your store">
-            <Editable editing tag="span" className="lp-brand" placeholder="Store name"
-              value={edit!.brandName} onCommit={(v) => edit!.onBrand(v)} />
+          <label className="lp-brandwrap" title="Rename your store">
+            <input className="lp-brand-input" value={edit!.brandName} placeholder="Store name"
+              onChange={(e) => edit!.onBrand(e.target.value)} />
             <Icon name="pen" size={13} />
-          </span>
+          </label>
           <span className="lp-cart mono">Cart</span>
         </div>
       )}

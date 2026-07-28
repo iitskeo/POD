@@ -76,11 +76,19 @@
   display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; margin: -6px -10px;
   border-radius: 9px; cursor: text; transition: background 120ms ease, box-shadow 120ms ease;
 }
-.landing.editing .lp-brandwrap:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent); }
-.landing.editing .lp-brandwrap svg { color: var(--lp-muted); opacity: 0; transition: opacity 120ms ease; flex-shrink: 0; }
-.landing.editing .lp-brandwrap:hover svg { opacity: 1; }
-.landing.editing .lp-brand { font-family: var(--display); font-weight: 800; font-size: 1.2rem; letter-spacing: -0.01em; color: var(--ink); min-width: 3ch; display: inline-block; }
-.landing.editing .lp-brand:empty::before { content: attr(data-ph); color: var(--lp-muted); font-weight: 600; }
+.landing.editing .lp-brandwrap:hover,
+.landing.editing .lp-brandwrap:focus-within { background: color-mix(in srgb, var(--ink) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
+.landing.editing .lp-brandwrap svg { color: var(--lp-muted); opacity: 0.5; transition: opacity 120ms ease; flex-shrink: 0; }
+.landing.editing .lp-brandwrap:hover svg,
+.landing.editing .lp-brandwrap:focus-within svg { opacity: 1; color: var(--signal); }
+/* Real input (reliable placeholder, never collapses); override the admin's dark input skin. */
+.landing.editing .lp-brand-input {
+  font-family: var(--display); font-weight: 800; font-size: 1.2rem; letter-spacing: -0.01em; line-height: 1.2;
+  color: var(--ink); background: transparent; border: 0; outline: 0; padding: 0; margin: 0;
+  min-width: 8ch; width: 12ch; box-shadow: none;
+}
+.landing.editing .lp-brand-input:focus { box-shadow: none; }
+.landing.editing .lp-brand-input::placeholder { color: var(--lp-muted); font-weight: 600; opacity: 1; }
 .landing.editing .lp-cart { color: var(--lp-muted); font-size: 12px; }
 
 .landing.editing .lp-wrap { position: relative; outline: 1px dashed transparent; transition: outline-color 120ms ease; cursor: default; }
