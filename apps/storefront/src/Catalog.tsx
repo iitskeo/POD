@@ -28,11 +28,9 @@ export function Catalog() {
         try {
           const d = await api.designForProduct(p.id);
           if (stale || !d.elements.length) return;
-          const off = p.offeredVariantColors;
-          const color = p.variants.find((v) => !off || (v.color != null && off.includes(v.color)))?.colorCode ?? null;
           const url = await composeProductThumbnail({
             placement: p.placements[0], elements: d.elements, values: defaultValues(d.elements),
-            resolver, garmentColor: color, size: 480,
+            resolver, garmentColor: null, size: 480,
           });
           if (!stale && url) setComposites((m) => ({ ...m, [p.id]: url }));
         } catch { /* fall back to the base photo */ }

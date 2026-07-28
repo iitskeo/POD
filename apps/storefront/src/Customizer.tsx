@@ -89,19 +89,19 @@ export function Customizer({ slug }: { slug: string }) {
             <button key={pl.placement} data-on={pl.placement === active} onClick={() => setActive(pl.placement)}>{pl.placement}</button>
           ))}
         </div>
-        <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize"
-          garmentColor={previewVariant?.colorCode ?? (color ? swatch(color) : null)} />
+        <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize" />
         <p className="hint">Live preview — this is what prints.</p>
 
-        {(product.mockups?.featured?.length ?? 0) > 0 && (
+        {(previewVariant?.image || (product.mockups?.featured?.length ?? 0) > 0) && (
           <div className="cz-real">
-            <span className="eyebrow">On the product</span>
+            <span className="eyebrow">On the product{color ? ` · ${color}` : ""}</span>
             <div className="mockup-row">
-              {product.mockups!.featured.map((url, i) => (
-                <img key={url} src={url} alt={`${product.name} ${i + 1}`} loading="lazy" />
+              {previewVariant?.image && <img key="variant" src={previewVariant.image} alt={`${product.name} ${color ?? ""}`} loading="lazy" />}
+              {(product.mockups?.featured ?? []).map((url) => (
+                <img key={url} src={url} alt={`${product.name} mockup`} loading="lazy" />
               ))}
             </div>
-            <p className="hint">Realistic product photos. Your exact design shows in the live preview above.</p>
+            <p className="hint">The real product in your chosen colour. Your exact design shows in the live preview above.</p>
           </div>
         )}
       </div>
