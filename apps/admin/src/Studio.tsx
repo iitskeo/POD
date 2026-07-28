@@ -463,7 +463,8 @@ export function Studio({ productId, onBack }: { productId: string; onBack: () =>
           )}
           <div className="stage-stack">
             <PlacementStage placement={placement} elements={elements} values={values} resolver={resolver}
-              mode="author" selectedIds={selectedIds} onSelect={selectOne} onSelectMany={selectManyExpanded}
+              mode="author" garmentColor={product.variants.find((v) => v.id === variantId)?.colorCode ?? null}
+              selectedIds={selectedIds} onSelect={selectOne} onSelectMany={selectManyExpanded}
               onChange={canvasChange} onChangeMany={canvasChangeMany} onTransformStart={() => hist.snapshot()} onAction={onAction} onDropAsset={onDropAsset} />
             {selected && !coachOff && (
               <div className="coach">

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { renderArtwork, type Resolver } from "./compose";
+import { recolorGarment } from "./garment";
 import { Icon } from "./icons";
 import type { Element, Placement, Rect, SlotValues } from "./types";
 
@@ -87,6 +88,8 @@ interface Props {
   values: SlotValues;
   resolver: Resolver;
   mode: "author" | "customize";
+  /** Variant colour (hex). When set, the neutral garment template is recoloured live. */
+  garmentColor?: string | null;
   selectedIds?: string[];
   onSelect?: (id: string | null, additive?: boolean) => void;
   onSelectMany?: (ids: string[]) => void;
@@ -159,7 +162,7 @@ function equalSpacing(m: Rect, os: Rect[], thr: number): { nx?: number; ny?: num
  * the read-only storefront preview and is left unchanged.
  */
 export function PlacementStage({
-  placement, elements, values, resolver, mode,
+  placement, elements, values, resolver, mode, garmentColor,
   selectedIds = [], onSelect, onSelectMany, onChange, onChangeMany, onTransformStart, onAction, onDropAsset, onRemove, onOverflow,
 }: Props) {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -189,6 +192,15 @@ export function PlacementStage({
     width: placement.printArea.width / placement.templateWidth,
     height: placement.printArea.height / placement.templateHeight,
   }), [placement]);
+
+  // Recolour the neutral garment template to the chosen variant colour (docs/pod/09 §2.1).
+  const [garmentSrc, setGarmentSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let stale = false;
+    setGarmentSrc(null);
+    if (garmentColor) recolorGarment(placement.imageUrl, garmentColor).then((src) => { if (!stale) setGarmentSrc(src); });
+    return () => { stale = true; };
+  }, [placement.imageUrl, garmentColor]);
 
   useEffect(() => {
     let stale = false;
@@ -396,7 +408,7 @@ export function PlacementStage({
       style={{
         aspectRatio: `${placement.templateWidth} / ${placement.templateHeight}`,
         backgroundColor: placement.backgroundColor ?? undefined,
-        backgroundImage: `url(${placement.imageUrl})`,
+        backgroundImage: `url(${garmentSrc ?? placement.imageUrl})`,
       }}
       onPointerDown={(e) => { if (authoring && !spaceHeld && e.target === e.currentTarget) startMarquee(e); }}
       onDragOver={authoring && onDropAsset ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } : undefined}

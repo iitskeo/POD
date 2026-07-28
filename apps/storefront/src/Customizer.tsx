@@ -89,7 +89,8 @@ export function Customizer({ slug }: { slug: string }) {
             <button key={pl.placement} data-on={pl.placement === active} onClick={() => setActive(pl.placement)}>{pl.placement}</button>
           ))}
         </div>
-        <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize" />
+        <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize"
+          garmentColor={previewVariant?.colorCode ?? (color ? swatch(color) : null)} />
         <p className="hint">Live preview — this is what prints.</p>
 
         {(product.mockups?.featured?.length ?? 0) > 0 && (

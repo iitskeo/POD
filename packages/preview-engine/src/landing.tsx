@@ -59,6 +59,8 @@ interface LandingViewProps {
   photoUrl: (productId: string) => string;
   imageUrl?: (uploadId: string) => string;
   onNavigate?: (to: string) => void;
+  /** Card image resolver (mockup → composite → photo). Defaults to the product photo. */
+  cardImage?: (p: Product) => string | undefined;
   edit?: LandingEdit;
 }
 
@@ -88,28 +90,32 @@ function Editable({ editing, value, onCommit, tag, className, placeholder, multi
   return createElement(tag, props);
 }
 
-function ProductCards({ products, photoUrl, onNavigate }: {
-  products: Product[]; photoUrl: (id: string) => string; onNavigate?: (to: string) => void;
+function ProductCards({ products, photoUrl, cardImage, onNavigate }: {
+  products: Product[]; photoUrl: (id: string) => string;
+  cardImage?: (p: Product) => string | undefined; onNavigate?: (to: string) => void;
 }) {
   if (!products.length) return <p className="hint">No products yet.</p>;
   return (
     <div className="grid">
-      {products.map((p) => (
+      {products.map((p) => {
+        const src = cardImage?.(p) ?? (p.hasPhoto ? photoUrl(p.id) : undefined);
+        return (
         <a key={p.id} className="card" href={`/p/${p.slug}`}
           onClick={(e) => { if (onNavigate) { e.preventDefault(); onNavigate(`/p/${p.slug}`); } }}>
-          <div className="card-img">{p.hasPhoto ? <img src={photoUrl(p.id)} alt={p.name} /> : <div className="ph" />}</div>
+          <div className="card-img">{src ? <img src={src} alt={p.name} /> : <div className="ph" />}</div>
           <div className="card-body">
             <h3>{p.name}</h3>
             <span className="mono price">from ${(p.retailPriceCents / 100).toFixed(2)}</span>
           </div>
         </a>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 /** The storefront landing, and the admin's live editor surface. One renderer, both apps. */
-export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, edit }: LandingViewProps) {
+export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, cardImage, edit }: LandingViewProps) {
   const editing = !!edit;
   const published = products.filter((p) => p.status === "published");
   const [dragId, setDragId] = useState<string | null>(null);
@@ -189,7 +195,7 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
                 <section className="lp-block" id="products">
                   <Editable editing={editing} tag="h2" className="lp-h" placeholder="Section title"
                     value={s.title} onCommit={(v) => edit!.onText(s.id, { title: v })} />
-                  <ProductCards products={list} photoUrl={photoUrl} onNavigate={onNavigate} />
+                  <ProductCards products={list} photoUrl={photoUrl} cardImage={cardImage} onNavigate={onNavigate} />
                 </section>
               );
             }
@@ -200,7 +206,7 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
                     <Editable editing={editing} tag="h2" className="lp-h" placeholder="Section title"
                       value={s.title} onCommit={(v) => edit!.onText(s.id, { title: v })} />
                   )}
-                  <ProductCards products={published} photoUrl={photoUrl} onNavigate={onNavigate} />
+                  <ProductCards products={published} photoUrl={photoUrl} cardImage={cardImage} onNavigate={onNavigate} />
                 </section>
               );
             case "story":
