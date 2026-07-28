@@ -79,6 +79,7 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
                 );
               })()}
             </div>
+            <div className="spacer" />
             <button className="btn" onClick={() => setEditing(p)}>Edit</button>
             <button className="btn" onClick={() => onDesign(p.id)}>Design</button>
             {p.status === "published"

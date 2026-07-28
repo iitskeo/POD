@@ -160,8 +160,8 @@ export async function importProduct(
     String(catalogProductId),
     String(representative.id),
     photoKey,
-    priceRef,
-    priceRef,
+    priceRef * 2, // retail starts at 2x the base cost so the product ships with a margin
+    priceRef,     // base cost (Printful)
     JSON.stringify(placements),
     Object.keys(variantTemplates).length ? JSON.stringify(variantTemplates) : null,
     JSON.stringify(variantList),
