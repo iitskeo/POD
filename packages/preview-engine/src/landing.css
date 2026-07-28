@@ -20,6 +20,19 @@
 .landing .lp-sub { max-width: 560px; color: var(--lp-muted); font-size: 1.05rem; line-height: 1.6; }
 .landing .lp-hero .cta { margin-top: 8px; text-decoration: none; display: inline-flex; }
 
+/* Banner — promo/discount strip; height strip | tall | full; image or color background. */
+.landing .lp-banner {
+  display: grid; place-items: center; text-align: center; padding: 28px 24px;
+  background: var(--ink); color: var(--bone);
+}
+.landing .lp-banner.h-tall { min-height: 46vh; }
+.landing .lp-banner.h-full { min-height: 92vh; }
+.landing .lp-banner.has-img::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.4); }
+.landing .lp-banner-in { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.landing .lp-banner-title { font-family: var(--display); font-weight: 800; letter-spacing: -0.01em; font-size: clamp(1.5rem, 3.6vw, 2.8rem); line-height: 1.05; }
+.landing .lp-banner-sub { font-size: 1.05rem; opacity: 0.85; }
+.landing .lp-banner .cta { margin-top: 6px; text-decoration: none; display: inline-flex; }
+
 /* Product blocks (featured / grid) */
 .landing .lp-block { max-width: 1120px; margin: 0 auto; padding: clamp(36px, 6vw, 80px) 24px; }
 .landing .lp-h {
@@ -53,6 +66,15 @@
 }
 
 /* ---- Editor chrome (admin only, .editing) ------------------------------------ */
+/* Editable store-header strip previewing the storefront wordmark (the live store's own
+   header renders it for real; this is the inline edit surface). */
+.landing.editing .lp-siteheader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--mist);
+}
+.landing.editing .lp-brand { font-family: var(--display); font-weight: 800; font-size: 1.2rem; letter-spacing: -0.01em; color: var(--ink); }
+.landing.editing .lp-cart { color: var(--lp-muted); font-size: 12px; }
+
 .landing.editing .lp-wrap { position: relative; outline: 1px dashed transparent; transition: outline-color 120ms ease; cursor: default; }
 .landing.editing .lp-wrap:hover { outline-color: color-mix(in srgb, var(--signal) 45%, transparent); }
 .landing.editing .lp-wrap.sel { outline: 2px solid var(--signal); outline-offset: -2px; }

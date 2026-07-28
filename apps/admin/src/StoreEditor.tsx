@@ -74,6 +74,13 @@ export function StoreEditor() {
     setSelectedId(s.id);
   };
 
+  const onBrand = (name: string) => setConfig((c) => {
+    if (!c) return c;
+    const next = { ...c, brandName: name };
+    scheduleSave(next);
+    return next;
+  });
+
   const publish = async () => { try { await api.publishLanding(); setUnpublished(false); } catch { /* keep dirty */ } };
 
   if (!config) return <div className="pad"><div className="sk sk-stage" /></div>;
@@ -96,6 +103,7 @@ export function StoreEditor() {
           imageUrl={(id) => api.uploadUrl(id)}
           edit={{
             selectedId, onSelect: setSelectedId, onText, onReorder, onRemove, onAdd,
+            brandName: config.brandName ?? "Abbiss", onBrand,
             renderControls: (s) => <SectionControls section={s} products={products} patch={patchSection} />,
           }}
         />
@@ -113,7 +121,7 @@ function SectionControls({ section, products, patch }: {
   const upload = async (file: File | undefined, key: "background" | "image") => {
     if (!file) return;
     const { uploadId } = await api.upload(file);
-    if (key === "background" && section.type === "hero") patch(section.id, { background: { ...section.background, imageId: uploadId } });
+    if (key === "background" && (section.type === "hero" || section.type === "banner")) patch(section.id, { background: { ...section.background, imageId: uploadId } });
     else patch(section.id, { imageId: uploadId });
   };
 
@@ -129,6 +137,35 @@ function SectionControls({ section, products, patch }: {
         <div className="se-field"><span className="eyebrow">Background</span>
           <div className="se-row">
             <input type="color" value={section.background.color ?? "#ffffff"}
+              onChange={(e) => patch(section.id, { background: { ...section.background, color: e.target.value, imageId: null } })} />
+            <label className="btn sm file">Image<input type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0], "background")} /></label>
+            {(section.background.imageId || section.background.color) &&
+              <button className="btn sm" onClick={() => patch(section.id, { background: { imageId: null, color: null } })}>Clear</button>}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (section.type === "banner") {
+    return (
+      <>
+        <div className="se-field"><span className="eyebrow">Height</span>
+          <div className="seg">
+            <button data-on={section.height === "strip"} onClick={() => patch(section.id, { height: "strip" })}>Strip</button>
+            <button data-on={section.height === "tall"} onClick={() => patch(section.id, { height: "tall" })}>Tall</button>
+            <button data-on={section.height === "full"} onClick={() => patch(section.id, { height: "full" })}>Full screen</button>
+          </div>
+        </div>
+        <label className="se-field"><span className="eyebrow">Button links to</span>
+          <select value={section.cta.target} onChange={(e) => patch(section.id, { cta: { ...section.cta, target: e.target.value } })}>
+            <option value="#products">Scroll to products</option>
+            {published.map((p) => <option key={p.id} value={`/p/${p.slug}`}>Product: {p.name}</option>)}
+          </select>
+        </label>
+        <div className="se-field"><span className="eyebrow">Background</span>
+          <div className="se-row">
+            <input type="color" value={section.background.color ?? "#161616"}
               onChange={(e) => patch(section.id, { background: { ...section.background, color: e.target.value, imageId: null } })} />
             <label className="btn sm file">Image<input type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0], "background")} /></label>
             {(section.background.imageId || section.background.color) &&

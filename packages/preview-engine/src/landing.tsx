@@ -26,6 +26,8 @@ export function newSection(type: LandingSectionType): LandingSection {
   switch (type) {
     case "hero":
       return { id, type, eyebrow: "New section", title: "A bold headline", subtitle: "Say what makes it special.", cta: { label: "Shop now", target: "#products" }, background: { imageId: null, color: null } };
+    case "banner":
+      return { id, type, title: "Limited-time offer", subtitle: "20% off — this week only.", cta: { label: "Shop the sale", target: "#products" }, background: { imageId: null, color: "#161616" }, height: "strip" };
     case "featured":
       return { id, type, title: "Featured", productIds: [] };
     case "grid":
@@ -44,6 +46,9 @@ export interface LandingEdit {
   onReorder: (dragId: string, targetId: string, after: boolean) => void;
   onRemove: (id: string) => void;
   onAdd: (type: LandingSectionType) => void;
+  /** The storefront wordmark, edited inline on the preview's site-header strip. */
+  brandName: string;
+  onBrand: (v: string) => void;
   /** Per-block non-text controls (image upload, product picker, CTA target) — admin-supplied. */
   renderControls: (section: LandingSection) => ReactNode;
 }
@@ -117,22 +122,29 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
     else if (target) onNavigate?.(target);
   };
 
-  const heroBg = (s: Extract<LandingSection, { type: "hero" }>) => {
-    const img = s.background.imageId && imageUrl ? `url(${imageUrl(s.background.imageId)})` : null;
+  const bgStyle = (bg: { imageId: string | null; color: string | null }) => {
+    const img = bg.imageId && imageUrl ? `url(${imageUrl(bg.imageId)})` : null;
     if (img) return { backgroundImage: img, backgroundSize: "cover", backgroundPosition: "center" };
-    if (s.background.color) return { background: s.background.color };
+    if (bg.color) return { background: bg.color };
     return undefined;
   };
 
   return (
     <div className={`landing${editing ? " editing" : ""}`}>
+      {editing && (
+        <div className="lp-siteheader">
+          <Editable editing tag="span" className="lp-brand" placeholder="Store name"
+            value={edit!.brandName} onCommit={(v) => edit!.onBrand(v)} />
+          <span className="lp-cart mono">Cart</span>
+        </div>
+      )}
       {config.sections.map((s) => {
         const sel = edit?.selectedId === s.id;
         const body = (() => {
           switch (s.type) {
             case "hero":
               return (
-                <section className="lp-hero" style={heroBg(s)}>
+                <section className="lp-hero" style={bgStyle(s.background)}>
                   <Editable editing={editing} tag="span" className="eyebrow" placeholder="Eyebrow"
                     value={s.eyebrow} onCommit={(v) => edit!.onText(s.id, { eyebrow: v })} />
                   <Editable editing={editing} tag="h1" className="lp-title" placeholder="Headline"
@@ -147,6 +159,27 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
                   )}
                 </section>
               );
+            case "banner": {
+              const hasImg = !!(s.background.imageId && imageUrl);
+              return (
+                <section className={`lp-banner h-${s.height}${hasImg ? " has-img" : ""}`} style={bgStyle(s.background)}>
+                  <div className="lp-banner-in">
+                    <Editable editing={editing} tag="h2" className="lp-banner-title" placeholder="Promo headline"
+                      value={s.title} onCommit={(v) => edit!.onText(s.id, { title: v })} />
+                    {(s.subtitle || editing) && (
+                      <Editable editing={editing} tag="p" className="lp-banner-sub" placeholder="Subtitle (optional)"
+                        value={s.subtitle} onCommit={(v) => edit!.onText(s.id, { subtitle: v })} />
+                    )}
+                    {(s.cta.label || editing) && (
+                      <a className="cta" href="#" onClick={(e) => { e.preventDefault(); ctaClick(s.cta.target); }}>
+                        <Editable editing={editing} tag="span" placeholder="Button (optional)"
+                          value={s.cta.label} onCommit={(v) => edit!.onText(s.id, { "cta.label": v })} />
+                      </a>
+                    )}
+                  </div>
+                </section>
+              );
+            }
             case "featured": {
               const list = s.productIds.map((id) => published.find((p) => p.id === id)).filter(Boolean) as Product[];
               return (
@@ -221,10 +254,22 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
 
 const BLOCKS: { type: LandingSectionType; label: string; icon: string }[] = [
   { type: "hero", label: "Hero", icon: "square" },
+  { type: "banner", label: "Banner", icon: "image" },
   { type: "featured", label: "Featured", icon: "star" },
   { type: "grid", label: "Product grid", icon: "grid" },
   { type: "story", label: "Story", icon: "type" },
 ];
+
+/** The config the storefront actually renders. Guarantees a published product is always
+ *  visible even if the owner emptied the landing or never added a product section. */
+export function effectiveLanding(config: LandingConfig | null, hasProducts: boolean): LandingConfig {
+  if (!config || config.sections.length === 0) return { ...DEFAULT_LANDING, brandName: config?.brandName };
+  const showsProducts = config.sections.some((s) => s.type === "grid" || s.type === "featured");
+  if (!showsProducts && hasProducts) {
+    return { ...config, sections: [...config.sections, { id: "auto-grid", type: "grid", title: "" }] };
+  }
+  return config;
+}
 
 /** Always-present way to add a section (and the guided empty state at zero sections). */
 function AddBar({ onAdd, empty }: { onAdd: (t: LandingSectionType) => void; empty?: boolean }) {

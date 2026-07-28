@@ -150,6 +150,9 @@ export interface LandingCta { label: string; target: string }
 export type LandingSection =
   | { id: string; type: "hero"; eyebrow: string; title: string; subtitle: string;
       cta: LandingCta; background: { imageId: string | null; color: string | null } }
+  | { id: string; type: "banner"; title: string; subtitle: string; cta: LandingCta;
+      background: { imageId: string | null; color: string | null };
+      height: "strip" | "tall" | "full" }
   | { id: string; type: "featured"; title: string; productIds: string[] }
   | { id: string; type: "grid"; title: string }
   | { id: string; type: "story"; title: string; body: string;
@@ -157,7 +160,12 @@ export type LandingSection =
 
 export type LandingSectionType = LandingSection["type"];
 
-export interface LandingConfig { version: number; sections: LandingSection[] }
+export interface LandingConfig {
+  version: number;
+  /** Storefront wordmark; falls back to "Abbiss" when unset. */
+  brandName?: string;
+  sections: LandingSection[];
+}
 
 /** An owner graphic in the library. */
 export interface Asset {

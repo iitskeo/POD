@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { api } from "./api";
 import { useCart } from "./cartStore";
 import { Catalog } from "./Catalog";
 import { ProductDetail } from "./ProductDetail";
@@ -26,6 +27,14 @@ export function App() {
   const path = usePath();
   const cartLines = useCart();
   const count = cartLines.reduce((n, l) => n + l.qty, 0);
+  const [brand, setBrand] = useState("Abbiss");
+
+  useEffect(() => {
+    api.getLanding().then((r) => {
+      const name = r.config?.brandName?.trim();
+      if (name) { setBrand(name); document.title = name; }
+    }).catch(() => {});
+  }, []);
 
   let page;
   const p = path.replace(/\/+$/, "") || "/";
@@ -41,7 +50,7 @@ export function App() {
   return (
     <>
       <header className="site-header">
-        <a className="brand" href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>Abbiss</a>
+        <a className="brand" href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>{brand}</a>
         <a className="cart-link mono" href="/cart" onClick={(e) => { e.preventDefault(); navigate("/cart"); }}>
           Cart{count > 0 && <span className="count">{count}</span>}
         </a>
