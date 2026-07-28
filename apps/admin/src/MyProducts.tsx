@@ -66,6 +66,19 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
               <input type="number" step="0.01" defaultValue={(p.retailPriceCents / 100).toFixed(2)}
                 onBlur={(e) => setPrice(p.id, Number(e.target.value))} />
             </label>
+            <div className="price-field margin-field">
+              <span className="hint">Margin</span>
+              {(() => {
+                const m = p.retailPriceCents - p.basePriceCents;
+                const pct = p.basePriceCents > 0 ? Math.round((m / p.basePriceCents) * 100) : null;
+                return (
+                  <span className="margin" data-sign={m > 0 ? "pos" : m < 0 ? "neg" : "zero"}
+                    title="Retail minus Printful base cost">
+                    {p.basePriceCents ? `$${(m / 100).toFixed(2)}${pct !== null ? ` · ${pct}%` : ""}` : "—"}
+                  </span>
+                );
+              })()}
+            </div>
             <button className="btn" onClick={() => setEditing(p)}>Edit</button>
             <button className="btn" onClick={() => onDesign(p.id)}>Design</button>
             {p.status === "published"

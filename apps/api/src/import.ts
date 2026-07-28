@@ -140,7 +140,7 @@ export async function importProduct(
 
   const now = Date.now();
   const techniqueList = [...new Set(placements.map((p) => p.technique))];
-  const priceRef = pickPrice(pricesRes.data);
+  const priceRef = pickBaseCost(pricesRes.data, techniqueList);
   const description = product.description ?? null;
   const materials = normalizeMaterials(product.material);
 
@@ -191,14 +191,26 @@ function normalizeMaterials(material: Array<{ name: string; percentage?: number 
   return parts.length ? parts.join(", ") : null;
 }
 
-/** A representative reference price (min variant price), just for owner context. */
-function pickPrice(prices: unknown): number {
+/**
+ * Printful base cost (cents) = the cheapest variant fulfilment price for the technique(s)
+ * this product actually uses. The prices endpoint lists every technique a product *could*
+ * use; taking the global min would understate cost when a cheaper technique the design
+ * doesn't use is available. Falls back to the global min if the technique keys don't line
+ * up (Printful names differ across endpoints, e.g. "knitting" vs "knitwear").
+ */
+function pickBaseCost(prices: unknown, techniqueKeys: string[]): number {
   try {
-    const p = prices as { variants?: Array<{ techniques?: Array<{ price?: string }> }> };
-    const all = (p.variants ?? []).flatMap((v) =>
-      (v.techniques ?? []).map((t) => Math.round(Number(t.price ?? 0) * 100)),
-    ).filter((n) => n > 0);
-    return all.length ? Math.min(...all) : 0;
+    const p = prices as { variants?: Array<{ techniques?: Array<{ technique_key?: string; price?: string }> }> };
+    const variants = p.variants ?? [];
+    const wanted = new Set(techniqueKeys.map((t) => t.toLowerCase()));
+    const collect = (matchTechnique: boolean) =>
+      variants.flatMap((v) => (v.techniques ?? [])
+        .filter((t) => !matchTechnique || (t.technique_key ? wanted.has(t.technique_key.toLowerCase()) : false))
+        .map((t) => Math.round(Number(t.price ?? 0) * 100)))
+        .filter((n) => n > 0);
+    const matched = collect(true);
+    const pool = matched.length ? matched : collect(false);
+    return pool.length ? Math.min(...pool) : 0;
   } catch {
     return 0;
   }
