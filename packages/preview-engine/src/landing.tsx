@@ -1,4 +1,4 @@
-import { createElement, useEffect, useRef, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
+import { createElement, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Icon } from "./icons";
 import type { LandingConfig, LandingSection, LandingSectionType, Product } from "./types";
 
@@ -40,7 +40,8 @@ export interface LandingEdit {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onText: (id: string, patch: Record<string, string>) => void;
-  onMove: (id: string, dir: -1 | 1) => void;
+  /** Move the dragged block to before/after the target block. */
+  onReorder: (dragId: string, targetId: string, after: boolean) => void;
   onRemove: (id: string) => void;
   onAdd: (afterId: string, type: LandingSectionType) => void;
   /** Per-block non-text controls (image upload, product picker, CTA target) — admin-supplied. */
@@ -106,6 +107,9 @@ function ProductCards({ products, photoUrl, onNavigate }: {
 export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, edit }: LandingViewProps) {
   const editing = !!edit;
   const published = products.filter((p) => p.status === "published");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [overAfter, setOverAfter] = useState(false);
 
   const ctaClick = (target: string) => {
     if (editing) return;
@@ -179,11 +183,30 @@ export function LandingView({ config, products, photoUrl, imageUrl, onNavigate, 
         })();
 
         if (!editing) return <div key={s.id}>{body}</div>;
+        const dragging = dragId === s.id;
+        const over = overId === s.id && dragId !== s.id;
         return (
-          <div key={s.id} className={`lp-wrap${sel ? " sel" : ""}`} onClick={() => edit!.onSelect(s.id)}>
+          <div key={s.id}
+            className={`lp-wrap${sel ? " sel" : ""}${dragging ? " dragging" : ""}${over ? (overAfter ? " over-after" : " over-before") : ""}`}
+            onClick={() => edit!.onSelect(s.id)}
+            onDragOver={(e) => {
+              if (!dragId || dragId === s.id) return;
+              e.preventDefault();
+              const r = e.currentTarget.getBoundingClientRect();
+              setOverId(s.id); setOverAfter(e.clientY > r.top + r.height / 2);
+            }}
+            onDrop={(e) => {
+              if (!dragId || dragId === s.id) return;
+              e.preventDefault();
+              edit!.onReorder(dragId, s.id, overAfter);
+              setDragId(null); setOverId(null);
+            }}>
             <div className="lp-tools" onClick={(e) => e.stopPropagation()}>
-              <button className="tb-btn" title="Move up" onClick={() => edit!.onMove(s.id, -1)}><Icon name="chevron-up" size={15} /></button>
-              <button className="tb-btn" title="Move down" onClick={() => edit!.onMove(s.id, 1)}><Icon name="chevron-down" size={15} /></button>
+              <span className="tb-btn lp-drag" title="Drag to reorder" draggable
+                onDragStart={(e) => { setDragId(s.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.id); }}
+                onDragEnd={() => { setDragId(null); setOverId(null); }}>
+                <Icon name="move-vertical" size={15} />
+              </span>
               <button className="tb-btn danger" title="Remove" onClick={() => edit!.onRemove(s.id)}><Icon name="trash" size={15} /></button>
             </div>
             {body}

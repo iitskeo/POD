@@ -51,9 +51,21 @@
 }
 
 /* ---- Editor chrome (admin only, .editing) ------------------------------------ */
-.landing.editing .lp-wrap { outline: 1px dashed transparent; transition: outline-color 120ms ease; cursor: default; }
+.landing.editing .lp-wrap { position: relative; outline: 1px dashed transparent; transition: outline-color 120ms ease; cursor: default; }
 .landing.editing .lp-wrap:hover { outline-color: color-mix(in srgb, var(--signal) 45%, transparent); }
 .landing.editing .lp-wrap.sel { outline: 2px solid var(--signal); outline-offset: -2px; }
+
+/* Drag to reorder: grab handle, ghosted source, and a bold insertion line. */
+.landing.editing .lp-drag { cursor: grab; }
+.landing.editing .lp-drag:active { cursor: grabbing; }
+.landing.editing .lp-wrap.dragging { opacity: 0.4; }
+.landing.editing .lp-wrap.over-before::before,
+.landing.editing .lp-wrap.over-after::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 4px; z-index: 8;
+  background: var(--signal); box-shadow: 0 0 10px color-mix(in srgb, var(--signal) 70%, transparent);
+}
+.landing.editing .lp-wrap.over-before::before { top: -2px; }
+.landing.editing .lp-wrap.over-after::after { bottom: -2px; }
 
 .landing.editing .lp-editable { cursor: text; border-radius: 4px; }
 .landing.editing .lp-editable:empty::before { content: attr(data-ph); opacity: 0.4; }

@@ -52,13 +52,15 @@ export function StoreEditor() {
       return next as unknown as LandingSection;
     }));
 
-  const onMove = (id: string, dir: -1 | 1) => apply((secs) => {
-    const i = secs.findIndex((s) => s.id === id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= secs.length) return secs;
-    const copy = secs.slice();
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-    return copy;
+  const onReorder = (dragId: string, targetId: string, after: boolean) => apply((secs) => {
+    const item = secs.find((s) => s.id === dragId);
+    if (!item || dragId === targetId) return secs;
+    const without = secs.filter((s) => s.id !== dragId);
+    let ti = without.findIndex((s) => s.id === targetId);
+    if (ti < 0) return secs;
+    if (after) ti += 1;
+    without.splice(ti, 0, item);
+    return without;
   });
 
   const onRemove = (id: string) => {
@@ -93,7 +95,7 @@ export function StoreEditor() {
           photoUrl={(id) => api.productPhotoUrl(id)}
           imageUrl={(id) => api.uploadUrl(id)}
           edit={{
-            selectedId, onSelect: setSelectedId, onText, onMove, onRemove, onAdd,
+            selectedId, onSelect: setSelectedId, onText, onReorder, onRemove, onAdd,
             renderControls: (s) => <SectionControls section={s} products={products} patch={patchSection} />,
           }}
         />
