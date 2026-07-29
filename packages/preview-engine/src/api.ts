@@ -52,7 +52,7 @@ export class ApiClient {
   patchProduct(id: string, patch: {
     name?: string; retailPriceCents?: number; status?: string;
     offeredVariantColors?: string[] | null;
-    mockups?: { generated: string[]; featured: string[] } | null;
+    mockups?: { generated: string[]; featured: string[]; byColor?: Record<string, string> } | null;
     description?: string | null; materials?: string | null;
   }) {
     return this.req<Product>(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
@@ -109,16 +109,17 @@ export class ApiClient {
   async mockup(
     productId: string,
     files: Array<{ placement: string; printFileUrl: string }>,
+    variantIds?: number[],
     onProgress?: (attempt: number) => void,
-  ): Promise<string[]> {
-    const { taskId } = await this.req<{ taskId: string }>("/api/mockup", { method: "POST", body: JSON.stringify({ productId, files }) });
+  ): Promise<Array<{ variantId: number; url: string }>> {
+    const { taskId } = await this.req<{ taskId: string }>("/api/mockup", { method: "POST", body: JSON.stringify({ productId, files, variantIds }) });
     // ~3 min ceiling. If Printful is still not done, the caller offers "publish without
     // mockups" so the owner is never stuck waiting (some products mock up slowly or not at all).
     for (let attempt = 0; attempt < 90; attempt++) {
       await new Promise((r) => setTimeout(r, 2000));
-      const s = await this.req<{ status: string; urls?: string[]; error?: string }>(`/api/mockup?task=${encodeURIComponent(taskId)}`);
+      const s = await this.req<{ status: string; mockups?: Array<{ variantId: number; url: string }>; urls?: string[]; error?: string }>(`/api/mockup?task=${encodeURIComponent(taskId)}`);
       onProgress?.(attempt);
-      if (s.status === "completed") return s.urls ?? [];
+      if (s.status === "completed") return s.mockups ?? (s.urls ?? []).map((url) => ({ variantId: 0, url }));
       if (s.status === "failed") throw new Error(s.error ?? "Mockup generation failed");
     }
     throw new Error("Printful is taking too long on this product. You can publish without mockups and add them later.");

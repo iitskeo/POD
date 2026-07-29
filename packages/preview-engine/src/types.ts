@@ -130,8 +130,9 @@ export interface Product {
   techniques: string[];
   /** Owner-curated variant colors offered to the shopper. null = offer all. */
   offeredVariantColors: string[] | null;
-  /** Printful mockups from publish. featured is ordered; the first is the main image. */
-  mockups: { generated: string[]; featured: string[] } | null;
+  /** Printful mockups from publish. featured is ordered (first = main image); byColor maps a
+   *  variant colour name to its mockup so the customizer can show the chosen colour. */
+  mockups: { generated: string[]; featured: string[]; byColor?: Record<string, string> } | null;
 }
 
 export interface Design {

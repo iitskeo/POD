@@ -79,7 +79,7 @@ function rowToProduct(r: ProductRow) {
     variants: JSON.parse(r.variants) as Variant[],
     techniques: r.techniques ? JSON.parse(r.techniques) : [],
     offeredVariantColors: r.offered_variant_colors ? JSON.parse(r.offered_variant_colors) as string[] : null,
-    mockups: r.mockups ? JSON.parse(r.mockups) as { generated: string[]; featured: string[] } : null,
+    mockups: r.mockups ? JSON.parse(r.mockups) as { generated: string[]; featured: string[]; byColor?: Record<string, string> } : null,
   };
 }
 
@@ -194,7 +194,7 @@ async function printfulRoutes(
 
 async function renderMockup(
   env: Env, store: StoreRow,
-  body: { productId: string; files: Array<{ placement: string; printFileUrl: string }> },
+  body: { productId: string; files: Array<{ placement: string; printFileUrl: string }>; variantIds?: number[] },
   headers: HeadersInit,
 ): Promise<Response> {
   const rq = `selling_region_name=${REGION}`;
@@ -205,7 +205,12 @@ async function renderMockup(
     return json({ error: "Unknown product" }, { status: 404 }, headers);
   }
   const catalogId = Number(row.external_product_id);
-  const variantId = Number(row.external_variant_id ?? 0);
+  // One task can render several colours at once (docs/pod/09 P2). Cap it so publish stays
+  // reasonable and we don't hit Printful's rate limits.
+  const variantIds = (body.variantIds?.length ? body.variantIds : [Number(row.external_variant_id ?? 0)])
+    .filter((v) => v > 0)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .slice(0, 12);
 
   const styles = await call<{ data?: PrintFileStyle[] }>(
     env, store, `/v2/catalog-products/${catalogId}/mockup-styles?${rq}`,
@@ -218,7 +223,7 @@ async function renderMockup(
   const techniqueOf = (placement: string) =>
     styleList.find((s) => s.placement === placement)?.technique ?? "dtg";
 
-  if (!variantId) {
+  if (!variantIds.length) {
     return json({ error: "This product has no selected variant to mock up." }, { status: 422 }, headers);
   }
   if (styleIds.length === 0) {
@@ -237,7 +242,7 @@ async function renderMockup(
       source: "catalog",
       mockup_style_ids: styleIds,
       catalog_product_id: catalogId,
-      catalog_variant_ids: [variantId],
+      catalog_variant_ids: variantIds,
       placements: body.files.map((f) => ({
         placement: f.placement,
         technique: techniqueOf(f.placement),
@@ -261,8 +266,9 @@ async function pollMockup(env: Env, store: StoreRow, taskId: string, headers: He
     return json({ status: "failed", error: t.failure_reasons?.join("; ") ?? "Printful failed" }, {}, headers);
   }
   if (t.status === "completed") {
-    const urls = (t.catalog_variant_mockups ?? []).flatMap((v) => v.mockups.map((m) => m.mockup_url));
-    return json({ status: "completed", urls }, {}, headers);
+    const mockups = (t.catalog_variant_mockups ?? []).flatMap((v) =>
+      v.mockups.map((m) => ({ variantId: v.catalog_variant_id, url: m.mockup_url })));
+    return json({ status: "completed", mockups, urls: mockups.map((m) => m.url) }, {}, headers);
   }
   return json({ status: "pending" }, {}, headers);
 }
@@ -567,7 +573,7 @@ export default {
         const body = (await req.json()) as {
           name?: string; retailPriceCents?: number; status?: string;
           offeredVariantColors?: string[] | null;
-          mockups?: { generated: string[]; featured: string[] } | null;
+          mockups?: { generated: string[]; featured: string[]; byColor?: Record<string, string> } | null;
           description?: string | null; materials?: string | null;
         };
         const cur = await env.DB.prepare("SELECT * FROM products WHERE id = ?")

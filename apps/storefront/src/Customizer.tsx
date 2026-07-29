@@ -92,18 +92,27 @@ export function Customizer({ slug }: { slug: string }) {
         <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize" />
         <p className="hint">Live preview — this is what prints.</p>
 
-        {(previewVariant?.image || (product.mockups?.featured?.length ?? 0) > 0) && (
-          <div className="cz-real">
-            <span className="eyebrow">On the product{color ? ` · ${color}` : ""}</span>
-            <div className="mockup-row">
-              {previewVariant?.image && <img key="variant" src={previewVariant.image} alt={`${product.name} ${color ?? ""}`} loading="lazy" />}
-              {(product.mockups?.featured ?? []).map((url) => (
-                <img key={url} src={url} alt={`${product.name} mockup`} loading="lazy" />
-              ))}
+        {(() => {
+          // Prefer a per-colour Printful mockup (design + colour, docs/pod/09 P2); else the
+          // real per-colour product photo; plus the owner's featured mockups.
+          const colorMockup = color ? product.mockups?.byColor?.[color] : undefined;
+          const primary = colorMockup ?? previewVariant?.image;
+          const extras = colorMockup ? [] : (product.mockups?.featured ?? []);
+          if (!primary && !extras.length) return null;
+          return (
+            <div className="cz-real">
+              <span className="eyebrow">On the product{color ? ` · ${color}` : ""}</span>
+              <div className="mockup-row">
+                {primary && <img key="primary" src={primary} alt={`${product.name} ${color ?? ""}`} loading="lazy" />}
+                {extras.map((url) => <img key={url} src={url} alt={`${product.name} mockup`} loading="lazy" />)}
+              </div>
+              <p className="hint">
+                {colorMockup ? "Your design on the real product. " : "The real product in your chosen colour. "}
+                Your exact text shows in the live preview above.
+              </p>
             </div>
-            <p className="hint">The real product in your chosen colour. Your exact design shows in the live preview above.</p>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <aside className="cz-controls">

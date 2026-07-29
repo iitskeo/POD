@@ -165,6 +165,7 @@ function PublishModal({ product, onClose, onPublished }: {
   const [elapsed, setElapsed] = useState(0);
   const [generated, setGenerated] = useState<string[]>([]);
   const [featured, setFeatured] = useState<string[]>([]);
+  const [byColor, setByColor] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
 
@@ -185,11 +186,22 @@ function PublishModal({ product, onClose, onPublished }: {
           files.push({ placement: pl.placement, printFileUrl: url });
         }
         if (!files.length) { if (!stop) { setError("Add art in the studio before publishing."); } return; }
-        const urls = await api.mockup(product.id, files);
+        // One representative variant per offered colour (docs/pod/09 P2), so Printful renders a
+        // per-colour mockup with the design. Falls back to the default variant if uncurated.
+        const offered = product.offeredVariantColors;
+        const colorVariant = new Map<string, number>();
+        for (const v of product.variants) {
+          if (v.color && (!offered || offered.includes(v.color)) && !colorVariant.has(v.color)) colorVariant.set(v.color, v.id);
+        }
+        const mockups = await api.mockup(product.id, files, [...colorVariant.values()]);
         if (stop) return;
-        const capped = urls.slice(0, MAX_MOCKUPS);
-        setGenerated(capped);
-        setFeatured(capped.slice(0, 1)); // default: first is the main image
+        const colorOf = new Map(product.variants.map((v) => [v.id, v.color] as const));
+        const map: Record<string, string> = {};
+        for (const m of mockups) { const col = colorOf.get(m.variantId); if (col && !map[col]) map[col] = m.url; }
+        const urls = mockups.map((m) => m.url);
+        setGenerated(urls.slice(0, 12));
+        setByColor(map);
+        setFeatured(urls.slice(0, 1)); // default: first is the main image
         setPhase("pick");
       } catch (e) {
         if (!stop) setError(e instanceof Error ? e.message : String(e));
@@ -206,7 +218,7 @@ function PublishModal({ product, onClose, onPublished }: {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); setPhase("gen"); }
   };
   const retry = () => {
-    setError(""); setGenerated([]); setFeatured([]); setElapsed(0);
+    setError(""); setGenerated([]); setFeatured([]); setByColor({}); setElapsed(0);
     setPhase("gen"); setAttempt((a) => a + 1);
   };
 
@@ -220,7 +232,7 @@ function PublishModal({ product, onClose, onPublished }: {
     try {
       const up = await api.patchProduct(product.id, {
         status: "published",
-        mockups: { generated, featured: featured.length ? featured : generated.slice(0, 1) },
+        mockups: { generated, featured: featured.length ? featured : generated.slice(0, 1), byColor },
       });
       onPublished(up);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); setPhase("pick"); }
