@@ -18,6 +18,8 @@ bucket_name = "abbiss"
 ADMIN_URL = "https://abbiss-admin.kene00vargas.workers.dev"
 PRINTFUL_REDIRECT_URI = "https://abbiss-api.kene00vargas.workers.dev/api/printful/callback"
 ALLOWED_ORIGINS = "https://abbiss.kene00vargas.workers.dev,https://abbiss-admin.kene00vargas.workers.dev,http://localhost:5173,http://localhost:5174"
+# PayPal environment; credentials are Worker secrets. Flip to "live" for production.
+PAYPAL_ENV = "sandbox"
 
 [dev]
 port = 8787

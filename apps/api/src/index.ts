@@ -13,6 +13,11 @@ export interface Env {
   ADMIN_PASSPHRASE_HASH: string;
   /** HMAC key for the session cookie. */
   SESSION_SIGNING_KEY: string;
+  /** PayPal (docs/pod/10). 'sandbox' | 'live'; client id/secret/webhook are secrets. */
+  PAYPAL_ENV?: string;
+  PAYPAL_CLIENT_ID?: string;
+  PAYPAL_CLIENT_SECRET?: string;
+  PAYPAL_WEBHOOK_ID?: string;
 }
 
 import {
@@ -27,6 +32,7 @@ import {
 } from "./printful";
 import { importProduct, type Placement, type Variant } from "./import";
 import { isAuthed, login, logout, session } from "./auth";
+import { capturePaypalOrder, createPaypalOrder, paypalConfigured, verifyWebhook } from "./paypal";
 
 const REGION = "north_america";
 
@@ -488,6 +494,52 @@ export default {
         await env.DB.prepare("INSERT INTO quick_designs (id, name, thumb_key, elements, created_at) VALUES (?1,?2,NULL,?3,?4)")
           .bind(id, body.name || "Quick design", JSON.stringify(body.elements ?? []), Date.now()).run();
         return json({ id, name: body.name, elements: body.elements }, {}, headers);
+      }
+
+      // Payments — PayPal (docs/pod/10). Hosted; the server owns the amount.
+      if (path === "/api/pay/paypal/config" && req.method === "GET") {
+        return json({ configured: paypalConfigured(env), clientId: env.PAYPAL_CLIENT_ID ?? null, env: env.PAYPAL_ENV ?? "sandbox" }, {}, headers);
+      }
+      if (path === "/api/pay/paypal/create" && req.method === "POST") {
+        if (!paypalConfigured(env)) return json({ error: "PayPal is not configured yet." }, { status: 503 }, headers);
+        const { reference } = (await req.json()) as { reference: string };
+        const order = await env.DB.prepare("SELECT id, reference, status, subtotal_cents FROM orders WHERE reference = ?")
+          .bind(reference).first<{ id: string; reference: string; status: string; subtotal_cents: number }>();
+        if (!order) return json({ error: "Order not found" }, { status: 404 }, headers);
+        if (order.status === "paid") return json({ error: "Order already paid" }, { status: 409 }, headers);
+        const paypalOrderId = await createPaypalOrder(env, order.reference, order.subtotal_cents);
+        await env.DB.prepare("UPDATE orders SET status='pending_payment', payment_provider='paypal', paypal_order_id=?1, updated_at=?2 WHERE id=?3")
+          .bind(paypalOrderId, Date.now(), order.id).run();
+        return json({ paypalOrderId }, {}, headers);
+      }
+      if (path === "/api/pay/paypal/capture" && req.method === "POST") {
+        if (!paypalConfigured(env)) return json({ error: "PayPal is not configured yet." }, { status: 503 }, headers);
+        const { reference, paypalOrderId } = (await req.json()) as { reference: string; paypalOrderId: string };
+        const order = await env.DB.prepare("SELECT id, reference, status, subtotal_cents, paypal_order_id FROM orders WHERE reference = ?")
+          .bind(reference).first<{ id: string; reference: string; status: string; subtotal_cents: number; paypal_order_id: string | null }>();
+        if (!order) return json({ error: "Order not found" }, { status: 404 }, headers);
+        if (order.status === "paid") return json({ status: "paid", reference }, {}, headers); // idempotent
+        if (order.paypal_order_id !== paypalOrderId) return json({ error: "Order mismatch" }, { status: 409 }, headers);
+        const cap = await capturePaypalOrder(env, paypalOrderId);
+        const expected = (order.subtotal_cents / 100).toFixed(2);
+        if (cap.status !== "COMPLETED" || cap.currency !== "USD" || cap.amountValue !== expected) {
+          return json({ error: `Payment not valid (captured ${cap.amountValue} ${cap.currency})` }, { status: 402 }, headers);
+        }
+        await env.DB.prepare("UPDATE orders SET status='paid', paypal_capture_id=?1, paid_at=?2, updated_at=?2 WHERE id=?3")
+          .bind(cap.captureId, Date.now(), order.id).run();
+        return json({ status: "paid", reference }, {}, headers);
+      }
+      if (path === "/api/webhooks/paypal" && req.method === "POST") {
+        const event = (await req.json().catch(() => ({}))) as { event_type?: string; resource?: { custom_id?: string; invoice_id?: string; id?: string } };
+        if (!(await verifyWebhook(env, req.headers, event))) return json({ error: "invalid signature" }, { status: 400 }, headers);
+        if (event.event_type === "PAYMENT.CAPTURE.COMPLETED") {
+          const reference = event.resource?.custom_id ?? event.resource?.invoice_id;
+          if (reference) {
+            await env.DB.prepare("UPDATE orders SET status='paid', paypal_capture_id=COALESCE(paypal_capture_id, ?1), paid_at=COALESCE(paid_at, ?2), updated_at=?2 WHERE reference=?3 AND status != 'paid'")
+              .bind(event.resource?.id ?? null, Date.now(), reference).run();
+          }
+        }
+        return json({ ok: true }, {}, headers);
       }
 
       // Orders (public create; owner list)
