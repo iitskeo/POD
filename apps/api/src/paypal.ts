@@ -10,20 +10,17 @@ export function paypalBase(env: Env): string {
   return env.PAYPAL_ENV === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
 }
 
-/** The active credential set, chosen by PAYPAL_ENV so sandbox + live can coexist. Falls back
- *  to the unsuffixed names for convenience. */
+/** The active credential set, chosen by PAYPAL_ENV so sandbox + live can coexist. Secret names
+ *  are case-sensitive in Cloudflare, so accept both `_SANDBOX`/`_sandbox` (and `_LIVE`/`_live`),
+ *  then fall back to the unsuffixed names. */
 function creds(env: Env): { clientId?: string; secret?: string; webhookId?: string } {
-  if (env.PAYPAL_ENV === "live") {
-    return {
-      clientId: env.PAYPAL_CLIENT_ID_LIVE ?? env.PAYPAL_CLIENT_ID,
-      secret: env.PAYPAL_CLIENT_SECRET_LIVE ?? env.PAYPAL_CLIENT_SECRET,
-      webhookId: env.PAYPAL_WEBHOOK_ID_LIVE ?? env.PAYPAL_WEBHOOK_ID,
-    };
-  }
+  const e = env as unknown as Record<string, string | undefined>;
+  const suffixes = env.PAYPAL_ENV === "live" ? ["_LIVE", "_live"] : ["_SANDBOX", "_sandbox"];
+  const pick = (base: string) => e[`${base}${suffixes[0]}`] ?? e[`${base}${suffixes[1]}`] ?? e[base];
   return {
-    clientId: env.PAYPAL_CLIENT_ID_SANDBOX ?? env.PAYPAL_CLIENT_ID,
-    secret: env.PAYPAL_CLIENT_SECRET_SANDBOX ?? env.PAYPAL_CLIENT_SECRET,
-    webhookId: env.PAYPAL_WEBHOOK_ID_SANDBOX ?? env.PAYPAL_WEBHOOK_ID,
+    clientId: pick("PAYPAL_CLIENT_ID"),
+    secret: pick("PAYPAL_CLIENT_SECRET"),
+    webhookId: pick("PAYPAL_WEBHOOK_ID"),
   };
 }
 
