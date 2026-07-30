@@ -129,6 +129,13 @@ export class ApiClient {
   createOrder(body: unknown) { return this.req<{ id: string; reference: string; status: string }>("/api/orders", { method: "POST", body: JSON.stringify(body) }); }
   order(reference: string) { return this.req<StoredOrder>(`/api/orders/${reference}`); }
 
+  // Payments (PayPal) — hosted; the server owns the amount.
+  paypalConfig() { return this.req<{ configured: boolean; clientId: string | null; env: string }>("/api/pay/paypal/config"); }
+  paypalCreate(reference: string) { return this.req<{ paypalOrderId: string }>("/api/pay/paypal/create", { method: "POST", body: JSON.stringify({ reference }) }); }
+  paypalCapture(reference: string, paypalOrderId: string) {
+    return this.req<{ status: string; reference: string }>("/api/pay/paypal/capture", { method: "POST", body: JSON.stringify({ reference, paypalOrderId }) });
+  }
+
   productPhotoUrl(id: string) { return `${this.base}/api/products/${id}/photo`; }
 }
 

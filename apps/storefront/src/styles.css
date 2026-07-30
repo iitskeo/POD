@@ -67,6 +67,7 @@ input:focus, select:focus { border-color: var(--signal); }
 .tile { width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); cursor: pointer; padding: 8px; }
 .tile[data-on="true"] { border-color: var(--signal); }
 .tile img { width: 100%; height: 100%; object-fit: contain; }
+.paypal-buttons { margin-top: 10px; }
 .mockup-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .mockup-row img { width: 180px; border: 1px solid var(--line); border-radius: 3px; }
 .cz-real { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
