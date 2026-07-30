@@ -13,11 +13,18 @@ export interface Env {
   ADMIN_PASSPHRASE_HASH: string;
   /** HMAC key for the session cookie. */
   SESSION_SIGNING_KEY: string;
-  /** PayPal (docs/pod/10). 'sandbox' | 'live'; client id/secret/webhook are secrets. */
+  /** PayPal (docs/pod/10). PAYPAL_ENV ('sandbox'|'live') selects which credential set is used,
+   *  so both can live side by side. Unsuffixed names are an optional fallback. */
   PAYPAL_ENV?: string;
   PAYPAL_CLIENT_ID?: string;
   PAYPAL_CLIENT_SECRET?: string;
   PAYPAL_WEBHOOK_ID?: string;
+  PAYPAL_CLIENT_ID_SANDBOX?: string;
+  PAYPAL_CLIENT_SECRET_SANDBOX?: string;
+  PAYPAL_WEBHOOK_ID_SANDBOX?: string;
+  PAYPAL_CLIENT_ID_LIVE?: string;
+  PAYPAL_CLIENT_SECRET_LIVE?: string;
+  PAYPAL_WEBHOOK_ID_LIVE?: string;
 }
 
 import {
@@ -32,7 +39,7 @@ import {
 } from "./printful";
 import { importProduct, type Placement, type Variant } from "./import";
 import { isAuthed, login, logout, session } from "./auth";
-import { capturePaypalOrder, createPaypalOrder, paypalConfigured, verifyWebhook } from "./paypal";
+import { capturePaypalOrder, createPaypalOrder, paypalClientId, paypalConfigured, verifyWebhook } from "./paypal";
 
 const REGION = "north_america";
 
@@ -498,7 +505,7 @@ export default {
 
       // Payments — PayPal (docs/pod/10). Hosted; the server owns the amount.
       if (path === "/api/pay/paypal/config" && req.method === "GET") {
-        return json({ configured: paypalConfigured(env), clientId: env.PAYPAL_CLIENT_ID ?? null, env: env.PAYPAL_ENV ?? "sandbox" }, {}, headers);
+        return json({ configured: paypalConfigured(env), clientId: paypalClientId(env), env: env.PAYPAL_ENV ?? "sandbox" }, {}, headers);
       }
       if (path === "/api/pay/paypal/create" && req.method === "POST") {
         if (!paypalConfigured(env)) return json({ error: "PayPal is not configured yet." }, { status: 503 }, headers);
