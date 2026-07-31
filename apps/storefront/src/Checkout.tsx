@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { makeResolver, renderPrintFilePng, defaultValues } from "@abbiss/preview-engine";
 import { cart, useCart } from "./cartStore";
 import { api } from "./api";
 import { navigate } from "./App";
@@ -26,7 +27,7 @@ declare global { interface Window { paypal?: PayPalNamespace } }
 
 function PayPalButtons({ clientId, buildPayload, onPaid, onError }: {
   clientId: string;
-  buildPayload: () => unknown | null;
+  buildPayload: () => Promise<unknown | null>;
   onPaid: (reference: string) => void;
   onError: (msg: string) => void;
 }) {
@@ -41,7 +42,7 @@ function PayPalButtons({ clientId, buildPayload, onPaid, onError }: {
       paypal.Buttons({
         style: { layout: "vertical", shape: "rect", label: "pay" },
         createOrder: async () => {
-          const payload = buildRef.current();
+          const payload = await buildRef.current();
           if (!payload) { onError("Complete your shipping details first."); throw new Error("invalid form"); }
           const { reference } = await api.createOrder(payload);
           st.current.reference = reference;
@@ -77,17 +78,40 @@ export function Checkout() {
   const subtotal = cart.subtotalCents();
   const valid = f.email.includes("@") && !!f.fullName && !!f.address1 && !!f.city && !!f.zip;
 
-  const payload = () => valid ? {
-    email: f.email, notify,
-    shipping: { fullName: f.fullName, address1: f.address1, address2: f.address2, city: f.city, state: f.state, zip: f.zip, country: "US" },
-    items: lines.map((l) => ({ productId: l.productId, designId: l.designId, variantId: l.variantId, variantLabel: l.variantLabel, slotValues: l.slotValues, qty: l.qty })),
-  } : null;
+  const resolver = useMemo(() => makeResolver(api), []);
+
+  // Render each item's print files (customer's exact design) and upload them, so the order can
+  // be submitted to Printful after payment. Runs when the buyer clicks pay.
+  const buildPayload = async () => {
+    if (!valid) return null;
+    const items = [];
+    for (const l of lines) {
+      const printFiles: Record<string, string> = {};
+      try {
+        const [product, design] = await Promise.all([api.product(l.productId), api.designForProduct(l.productId)]);
+        const values = { ...defaultValues(design.elements), ...l.slotValues };
+        for (const pl of product.placements) {
+          if (!design.elements.some((e) => e.placement === pl.placement)) continue;
+          const png = await renderPrintFilePng(pl, design.elements, values, resolver);
+          const { url } = await api.uploadPrintFile(`ord-${l.productId}-${pl.placement}-${Date.now()}`, png);
+          printFiles[pl.placement] = url;
+        }
+      } catch { /* order still proceeds; fulfilment will flag a missing print file */ }
+      items.push({ productId: l.productId, designId: l.designId, variantId: l.variantId, variantLabel: l.variantLabel, slotValues: l.slotValues, qty: l.qty, printFiles });
+    }
+    return {
+      email: f.email, notify,
+      shipping: { fullName: f.fullName, address1: f.address1, address2: f.address2, city: f.city, state: f.state, zip: f.zip, country: "US" },
+      items,
+    };
+  };
 
   // Fallback (no payments configured yet): save the design and capture the email.
   const saveDraft = async () => {
-    const body = payload(); if (!body) return;
+    if (!valid) return;
     setBusy(true); setError(null);
     try {
+      const body = await buildPayload();
       const { reference } = await api.createOrder(body);
       cart.clear(); navigate(`/order/${reference}`);
     } catch (e) { setError(String((e as Error).message ?? e)); setBusy(false); }
@@ -120,7 +144,7 @@ export function Checkout() {
         {pp?.configured && pp.clientId ? (
           <>
             {!valid && <p className="hint">Fill in your email and shipping address to pay.</p>}
-            <PayPalButtons clientId={pp.clientId} buildPayload={payload}
+            <PayPalButtons clientId={pp.clientId} buildPayload={buildPayload}
               onPaid={(reference) => navigate(`/order/${reference}`)} onError={setError} />
           </>
         ) : (

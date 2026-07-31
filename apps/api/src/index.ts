@@ -25,6 +25,9 @@ export interface Env {
   PAYPAL_CLIENT_ID_LIVE?: string;
   PAYPAL_CLIENT_SECRET_LIVE?: string;
   PAYPAL_WEBHOOK_ID_LIVE?: string;
+  /** Resend (owner sales notifications, docs/pod/10). Inert until both are set. */
+  RESEND_API_KEY?: string;
+  OWNER_EMAIL?: string;
 }
 
 import {
@@ -40,6 +43,8 @@ import {
 import { importProduct, type Placement, type Variant } from "./import";
 import { isAuthed, login, logout, session } from "./auth";
 import { capturePaypalOrder, createPaypalOrder, paypalClientId, paypalConfigured, verifyWebhook } from "./paypal";
+import { fulfillOrder } from "./fulfill";
+import { notifyOwnerOfSale } from "./email";
 
 const REGION = "north_america";
 
@@ -332,6 +337,8 @@ async function imageAspect(buf: ArrayBuffer, type: string): Promise<number> {
 interface OrderItemIn {
   productId: string; designId: string; variantId: string; variantLabel: string;
   slotValues: Record<string, string>; qty: number;
+  /** Print files rendered at checkout, keyed by placement — used to submit to Printful. */
+  printFiles?: Record<string, string>;
 }
 
 async function createOrder(env: Env, body: {
@@ -362,12 +369,39 @@ async function createOrder(env: Env, body: {
   for (let i = 0; i < body.items.length; i++) {
     const it = body.items[i];
     await env.DB.prepare(
-      `INSERT INTO order_items (id, order_id, product_id, design_id, variant_id, variant_label, slot_values, qty, unit_price_cents, created_at)
-       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)`,
-    ).bind(crypto.randomUUID(), orderId, it.productId, it.designId, it.variantId, it.variantLabel, JSON.stringify(it.slotValues ?? {}), it.qty || 1, items[i][1], now).run();
+      `INSERT INTO order_items (id, order_id, product_id, design_id, variant_id, variant_label, slot_values, qty, unit_price_cents, print_files, created_at)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)`,
+    ).bind(crypto.randomUUID(), orderId, it.productId, it.designId, it.variantId, it.variantLabel, JSON.stringify(it.slotValues ?? {}), it.qty || 1, items[i][1], it.printFiles ? JSON.stringify(it.printFiles) : null, now).run();
   }
 
   return json({ id: orderId, reference, status: "draft" }, {}, headers);
+}
+
+/** After an order is paid: notify the owner and submit it to Printful. Best-effort — a failure
+ *  here never affects the buyer's paid confirmation; fulfilment failures are recorded for retry. */
+async function onOrderPaid(env: Env, reference: string): Promise<void> {
+  const order = await env.DB.prepare("SELECT id, email, shipping, subtotal_cents FROM orders WHERE reference = ?")
+    .bind(reference).first<{ id: string; email: string; shipping: string; subtotal_cents: number }>();
+  if (!order) return;
+  const { results: items } = await env.DB.prepare(
+    "SELECT oi.variant_label, oi.qty, p.name FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?",
+  ).bind(order.id).all<{ variant_label: string; qty: number; name: string | null }>();
+
+  await notifyOwnerOfSale(env, {
+    reference, email: order.email, subtotalCents: order.subtotal_cents,
+    items: items.map((i) => ({ name: i.name ?? "Item", variantLabel: i.variant_label, qty: i.qty })),
+    shipping: JSON.parse(order.shipping || "{}"),
+  });
+
+  const store = await currentStore(env);
+  if (store) {
+    try {
+      await fulfillOrder(env, store, order.id, env.PAYPAL_ENV === "live");
+    } catch (e) {
+      await env.DB.prepare("UPDATE orders SET fulfillment_status='failed', fulfillment_error=?1, updated_at=?2 WHERE id=?3")
+        .bind(String(e instanceof Error ? e.message : e).slice(0, 300), Date.now(), order.id).run().catch(() => {});
+    }
+  }
 }
 
 // ---- Router --------------------------------------------------------------------
@@ -534,6 +568,7 @@ export default {
         }
         await env.DB.prepare("UPDATE orders SET status='paid', paypal_capture_id=?1, paid_at=?2, updated_at=?2 WHERE id=?3")
           .bind(cap.captureId, Date.now(), order.id).run();
+        await onOrderPaid(env, reference).catch(() => { /* never block the paid confirmation */ });
         return json({ status: "paid", reference }, {}, headers);
       }
       if (path === "/api/webhooks/paypal" && req.method === "POST") {
