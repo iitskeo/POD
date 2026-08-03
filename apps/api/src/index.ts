@@ -33,6 +33,7 @@ export interface Env {
 import {
   authorizeUrl,
   call,
+  callMethod,
   catalogPath,
   createMockupTask,
   exchangeCode,
@@ -608,6 +609,28 @@ export default {
         const taskId = url.searchParams.get("task");
         if (!taskId) return json({ error: "Missing task id" }, { status: 400 }, headers);
         return pollMockup(env, store, taskId, headers);
+      }
+      // Draft-order test (admin): submit a print file to Printful as a DRAFT (no charge, no
+      // confirm) to validate the fulfilment mapping. Returns Printful's raw response.
+      if (path === "/api/fulfill/draft-test" && req.method === "POST") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const store = await currentStore(env);
+        if (!store) return json({ error: "Printful not connected" }, { status: 409 }, headers);
+        const b = (await req.json()) as { printFileUrl: string; variantId: number; placement: string; technique: string; retailPrice?: string };
+        const orderBody = {
+          external_id: `TEST-${Date.now()}`,
+          recipient: { name: "Abbiss Test", address1: "1 Congress Ave", city: "Austin", state_code: "TX", country_code: "US", zip: "78701", email: "test@example.com" },
+          order_items: [{
+            source: "catalog", catalog_variant_id: b.variantId, quantity: 1, retail_price: b.retailPrice ?? "18.88",
+            placements: [{ placement: b.placement, technique: b.technique, layers: [{ type: "file", url: b.printFileUrl }] }],
+          }],
+        };
+        try {
+          const printful = await callMethod<unknown>(env, store, "POST", "/v2/orders", orderBody);
+          return json({ ok: true, printful }, {}, headers);
+        } catch (e) {
+          return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, {}, headers);
+        }
       }
 
       // Landing (My Store). Public gets the published config (or default); admin gets the draft.

@@ -1,7 +1,5 @@
 import type { Env } from "./index";
-import type { StoreRow } from "./printful";
-
-const API = "https://api.printful.com";
+import { callMethod, type StoreRow } from "./printful";
 
 interface OrderRow { id: string; reference: string; email: string; shipping: string }
 interface ItemRow { product_id: string; variant_id: string; qty: number; print_files: string | null; unit_price_cents: number }
@@ -54,13 +52,9 @@ export async function fulfillOrder(env: Env, store: StoreRow, orderId: string, c
     order_items: orderItems,
   };
 
-  const res = await fetch(`${API}/v2/orders`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${store.access_token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as { data?: { id?: number | string }; id?: number | string };
-  if (!res.ok) throw new Error(`Printful order failed: ${JSON.stringify(json).slice(0, 300)}`);
+  const json = await callMethod<{ data?: { id?: number | string }; id?: number | string }>(
+    env, store, "POST", "/v2/orders", body,
+  );
   const printfulId = String(json.data?.id ?? json.id ?? "");
 
   await env.DB.prepare(
@@ -68,8 +62,6 @@ export async function fulfillOrder(env: Env, store: StoreRow, orderId: string, c
   ).bind(printfulId, Date.now(), orderId).run();
 
   if (confirm && printfulId) {
-    await fetch(`${API}/v2/orders/${encodeURIComponent(printfulId)}/confirmation`, {
-      method: "POST", headers: { Authorization: `Bearer ${store.access_token}` },
-    });
+    await callMethod(env, store, "POST", `/v2/orders/${encodeURIComponent(printfulId)}/confirmation`);
   }
 }

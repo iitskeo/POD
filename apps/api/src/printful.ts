@@ -131,6 +131,33 @@ export async function call<T>(env: Env, store: StoreRow, path: string): Promise<
   return body as T;
 }
 
+/** Like `call` but with a method + optional JSON body (create orders, confirm). Same token
+ *  refresh, so a POST never fails just because the access token expired. */
+export async function callMethod<T>(
+  env: Env, store: StoreRow, method: string, path: string, jsonBody?: unknown,
+): Promise<T> {
+  const send = async () => {
+    const res = await fetch(`${API}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${store.access_token}`,
+        ...(jsonBody !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      body: jsonBody !== undefined ? JSON.stringify(jsonBody) : undefined,
+    });
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return { res, body };
+  };
+  if (store.expires_at && store.expires_at - 60_000 < Date.now()) await refresh(env, store);
+  let { res, body } = await send();
+  if (res.status === 401) { await refresh(env, store); ({ res, body } = await send()); }
+  if (!res.ok) {
+    const msg = (body.error as { message?: string })?.message ?? JSON.stringify(body).slice(0, 250);
+    throw new Error(`Printful ${res.status}: ${msg}`);
+  }
+  return body as T;
+}
+
 export interface CatalogProduct {
   id: number;
   name: string;
