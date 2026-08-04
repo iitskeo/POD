@@ -71,3 +71,22 @@ export async function fulfillOrder(env: Env, store: StoreRow, orderId: string, c
     await callMethod(env, store, "POST", `/v2/orders/${encodeURIComponent(printfulId)}/confirmation`);
   }
 }
+
+/** Printful's live shipping rate (cents) for an address + items — the cheapest option, which is
+ *  what we charge the customer. Returns null if Printful can't quote it. */
+export async function shippingRateCents(
+  env: Env, store: StoreRow,
+  shipping: Record<string, string>,
+  items: Array<{ variantId: string; qty: number }>,
+): Promise<number | null> {
+  const body = {
+    recipient: {
+      address1: shipping.address1, city: shipping.city,
+      country_code: shipping.country || "US", state_code: shipping.state, zip: shipping.zip,
+    },
+    items: items.map((i) => ({ variant_id: Number(i.variantId), quantity: i.qty || 1 })),
+  };
+  const res = await callMethod<{ result?: Array<{ rate: string }> }>(env, store, "POST", "/shipping/rates", body);
+  const cents = (res.result ?? []).map((r) => Math.round(Number(r.rate) * 100)).filter((n) => n > 0);
+  return cents.length ? Math.min(...cents) : null;
+}

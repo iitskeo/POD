@@ -129,6 +129,11 @@ export class ApiClient {
   createOrder(body: unknown) { return this.req<{ id: string; reference: string; status: string }>("/api/orders", { method: "POST", body: JSON.stringify(body) }); }
   order(reference: string) { return this.req<StoredOrder>(`/api/orders/${reference}`); }
 
+  // Live shipping quote (cheapest Printful rate, in cents; null if it can't be quoted).
+  shippingRate(shipping: Record<string, string>, items: Array<{ variantId: string; qty: number }>) {
+    return this.req<{ shippingCents: number | null }>("/api/shipping/rate", { method: "POST", body: JSON.stringify({ shipping, items }) });
+  }
+
   // Payments (PayPal) — hosted; the server owns the amount.
   paypalConfig() { return this.req<{ configured: boolean; clientId: string | null; env: string }>("/api/pay/paypal/config"); }
   paypalCreate(reference: string) { return this.req<{ paypalOrderId: string }>("/api/pay/paypal/create", { method: "POST", body: JSON.stringify({ reference }) }); }

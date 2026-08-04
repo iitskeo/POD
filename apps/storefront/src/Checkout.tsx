@@ -75,6 +75,8 @@ export function Checkout() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pp, setPp] = useState<{ configured: boolean; clientId: string | null } | null>(null);
+  const [shipCents, setShipCents] = useState<number | null>(null);
+  const [quoting, setQuoting] = useState(false);
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
 
   useEffect(() => { api.paypalConfig().then(setPp).catch(() => setPp({ configured: false, clientId: null })); }, []);
@@ -82,6 +84,24 @@ export function Checkout() {
   if (lines.length === 0) { navigate("/"); return null; }
   const subtotal = cart.subtotalCents();
   const valid = f.email.includes("@") && !!f.fullName && !!f.address1 && !!f.city && !!f.zip;
+
+  // Quote Printful's live shipping once the address is complete, so the buyer sees the real
+  // total before paying. Debounced; the server recomputes + owns the amount at charge time.
+  const addrReady = !!f.address1 && !!f.city && !!f.state && !!f.zip;
+  const shipItems = lines.map((l) => ({ variantId: l.variantId, qty: l.qty }));
+  const shipKey = JSON.stringify([f.address1, f.city, f.state, f.zip, shipItems]);
+  useEffect(() => {
+    if (!addrReady) { setShipCents(null); return; }
+    let live = true;
+    setQuoting(true);
+    const t = setTimeout(() => {
+      api.shippingRate({ address1: f.address1, city: f.city, state: f.state, zip: f.zip, country: "US" }, shipItems)
+        .then((r) => { if (live) setShipCents(r.shippingCents); })
+        .catch(() => { if (live) setShipCents(null); })
+        .finally(() => { if (live) setQuoting(false); });
+    }, 600);
+    return () => { live = false; clearTimeout(t); };
+  }, [shipKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resolver = useMemo(() => makeResolver(api), []);
 
@@ -143,8 +163,13 @@ export function Checkout() {
       <aside className="co-summary">
         <span className="eyebrow">Order summary</span>
         {lines.map((l) => <div className="co-line" key={l.key}><span>{l.name} · {l.variantLabel} × {l.qty}</span><span className="mono">${((l.unitPriceCents * l.qty) / 100).toFixed(2)}</span></div>)}
-        <div className="co-total mono">Subtotal <strong>${(subtotal / 100).toFixed(2)}</strong></div>
-        <p className="hint">Shipping &amp; taxes calculated by the printer.</p>
+        <div className="co-line mono"><span>Subtotal</span><span>${(subtotal / 100).toFixed(2)}</span></div>
+        <div className="co-line mono">
+          <span>Shipping</span>
+          <span>{!addrReady ? "—" : quoting ? "…" : shipCents != null ? `$${(shipCents / 100).toFixed(2)}` : "—"}</span>
+        </div>
+        <div className="co-total mono">Total <strong>${((subtotal + (shipCents ?? 0)) / 100).toFixed(2)}</strong></div>
+        <p className="hint">{addrReady ? "Real shipping from the printer. Taxes may apply." : "Enter your address to see shipping."}</p>
 
         {pp?.configured && pp.clientId ? (
           <>

@@ -44,7 +44,7 @@ import {
 import { importProduct, type Placement, type Variant } from "./import";
 import { isAuthed, login, logout, session } from "./auth";
 import { capturePaypalOrder, createPaypalOrder, paypalClientId, paypalConfigured, verifyWebhook } from "./paypal";
-import { fulfillOrder } from "./fulfill";
+import { fulfillOrder, shippingRateCents } from "./fulfill";
 import { notifyOwnerOfSale } from "./email";
 
 const REGION = "north_america";
@@ -538,6 +538,19 @@ export default {
         return json({ id, name: body.name, elements: body.elements }, {}, headers);
       }
 
+      // Live shipping quote for the checkout summary (public). Cheapest Printful rate, in cents.
+      if (path === "/api/shipping/rate" && req.method === "POST") {
+        const store = await currentStore(env);
+        if (!store) return json({ shippingCents: null }, {}, headers);
+        const b = (await req.json()) as { shipping: Record<string, string>; items: Array<{ variantId: string; qty: number }> };
+        try {
+          const shippingCents = await shippingRateCents(env, store, b.shipping ?? {}, b.items ?? []);
+          return json({ shippingCents }, {}, headers);
+        } catch {
+          return json({ shippingCents: null }, {}, headers);
+        }
+      }
+
       // Payments — PayPal (docs/pod/10). Hosted; the server owns the amount.
       if (path === "/api/pay/paypal/config" && req.method === "GET") {
         return json({ configured: paypalConfigured(env), clientId: paypalClientId(env), env: env.PAYPAL_ENV ?? "sandbox" }, {}, headers);
@@ -545,13 +558,14 @@ export default {
       if (path === "/api/pay/paypal/create" && req.method === "POST") {
         if (!paypalConfigured(env)) return json({ error: "PayPal is not configured yet." }, { status: 503 }, headers);
         const { reference } = (await req.json()) as { reference: string };
-        const order = await env.DB.prepare("SELECT id, reference, status, subtotal_cents FROM orders WHERE reference = ?")
-          .bind(reference).first<{ id: string; reference: string; status: string; subtotal_cents: number }>();
+        const order = await env.DB.prepare("SELECT id, reference, status, subtotal_cents, shipping FROM orders WHERE reference = ?")
+          .bind(reference).first<{ id: string; reference: string; status: string; subtotal_cents: number; shipping: string }>();
         if (!order) return json({ error: "Order not found" }, { status: 404 }, headers);
         if (order.status === "paid") return json({ error: "Order already paid" }, { status: 409 }, headers);
         // Validate the address by creating the Printful draft BEFORE charging, so we never take
         // money for an order Printful can't fulfil (e.g. a bad shipping address).
         const store = await currentStore(env);
+        let shippingCents = 0;
         if (store) {
           try {
             await fulfillOrder(env, store, order.id, false);
@@ -560,22 +574,29 @@ export default {
             const clean = msg.replace(/^Printful \d+:\s*/, "");
             return json({ error: `Can't ship this order — ${clean}` }, { status: 422 }, headers);
           }
+          // Charge the customer Printful's real shipping rate on top of the subtotal.
+          const { results: its } = await env.DB.prepare("SELECT variant_id, qty FROM order_items WHERE order_id = ?")
+            .bind(order.id).all<{ variant_id: string; qty: number }>();
+          const ship = JSON.parse(order.shipping || "{}") as Record<string, string>;
+          shippingCents = (await shippingRateCents(env, store, ship, its.map((i) => ({ variantId: i.variant_id, qty: i.qty })))
+            .catch(() => null)) ?? 0;
         }
-        const paypalOrderId = await createPaypalOrder(env, order.reference, order.subtotal_cents);
+        await env.DB.prepare("UPDATE orders SET shipping_cents=?1 WHERE id=?2").bind(shippingCents, order.id).run();
+        const paypalOrderId = await createPaypalOrder(env, order.reference, order.subtotal_cents + shippingCents);
         await env.DB.prepare("UPDATE orders SET status='pending_payment', payment_provider='paypal', paypal_order_id=?1, updated_at=?2 WHERE id=?3")
           .bind(paypalOrderId, Date.now(), order.id).run();
-        return json({ paypalOrderId }, {}, headers);
+        return json({ paypalOrderId, shippingCents }, {}, headers);
       }
       if (path === "/api/pay/paypal/capture" && req.method === "POST") {
         if (!paypalConfigured(env)) return json({ error: "PayPal is not configured yet." }, { status: 503 }, headers);
         const { reference, paypalOrderId } = (await req.json()) as { reference: string; paypalOrderId: string };
-        const order = await env.DB.prepare("SELECT id, reference, status, subtotal_cents, paypal_order_id FROM orders WHERE reference = ?")
-          .bind(reference).first<{ id: string; reference: string; status: string; subtotal_cents: number; paypal_order_id: string | null }>();
+        const order = await env.DB.prepare("SELECT id, reference, status, subtotal_cents, shipping_cents, paypal_order_id FROM orders WHERE reference = ?")
+          .bind(reference).first<{ id: string; reference: string; status: string; subtotal_cents: number; shipping_cents: number | null; paypal_order_id: string | null }>();
         if (!order) return json({ error: "Order not found" }, { status: 404 }, headers);
         if (order.status === "paid") return json({ status: "paid", reference }, {}, headers); // idempotent
         if (order.paypal_order_id !== paypalOrderId) return json({ error: "Order mismatch" }, { status: 409 }, headers);
         const cap = await capturePaypalOrder(env, paypalOrderId);
-        const expected = (order.subtotal_cents / 100).toFixed(2);
+        const expected = ((order.subtotal_cents + (order.shipping_cents ?? 0)) / 100).toFixed(2);
         if (cap.status !== "COMPLETED" || cap.currency !== "USD" || cap.amountValue !== expected) {
           return json({ error: `Payment not valid (captured ${cap.amountValue} ${cap.currency})` }, { status: 402 }, headers);
         }
