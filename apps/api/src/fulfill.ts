@@ -14,7 +14,13 @@ export async function fulfillOrder(env: Env, store: StoreRow, orderId: string, c
   const order = await env.DB.prepare(
     "SELECT id, reference, email, shipping, printful_order_id FROM orders WHERE id = ?",
   ).bind(orderId).first<OrderRow & { printful_order_id: string | null }>();
-  if (!order || order.printful_order_id) return; // unknown or already submitted
+  if (!order) return;
+  // The draft may already exist (created at address validation, before payment). In that case
+  // just confirm it when going live; otherwise it stays a draft.
+  if (order.printful_order_id) {
+    if (confirm) await callMethod(env, store, "POST", `/v2/orders/${encodeURIComponent(order.printful_order_id)}/confirmation`);
+    return;
+  }
 
   const { results: items } = await env.DB.prepare(
     "SELECT product_id, variant_id, qty, print_files, unit_price_cents FROM order_items WHERE order_id = ?",

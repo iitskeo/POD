@@ -549,6 +549,18 @@ export default {
           .bind(reference).first<{ id: string; reference: string; status: string; subtotal_cents: number }>();
         if (!order) return json({ error: "Order not found" }, { status: 404 }, headers);
         if (order.status === "paid") return json({ error: "Order already paid" }, { status: 409 }, headers);
+        // Validate the address by creating the Printful draft BEFORE charging, so we never take
+        // money for an order Printful can't fulfil (e.g. a bad shipping address).
+        const store = await currentStore(env);
+        if (store) {
+          try {
+            await fulfillOrder(env, store, order.id, false);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            const clean = msg.replace(/^Printful \d+:\s*/, "");
+            return json({ error: `Can't ship this order — ${clean}` }, { status: 422 }, headers);
+          }
+        }
         const paypalOrderId = await createPaypalOrder(env, order.reference, order.subtotal_cents);
         await env.DB.prepare("UPDATE orders SET status='pending_payment', payment_provider='paypal', paypal_order_id=?1, updated_at=?2 WHERE id=?3")
           .bind(paypalOrderId, Date.now(), order.id).run();

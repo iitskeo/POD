@@ -44,10 +44,15 @@ function PayPalButtons({ clientId, buildPayload, onPaid, onError }: {
         createOrder: async () => {
           const payload = await buildRef.current();
           if (!payload) { onError("Complete your shipping details first."); throw new Error("invalid form"); }
-          const { reference } = await api.createOrder(payload);
-          st.current.reference = reference;
-          const { paypalOrderId } = await api.paypalCreate(reference);
-          return paypalOrderId;
+          try {
+            const { reference } = await api.createOrder(payload);
+            st.current.reference = reference;
+            const { paypalOrderId } = await api.paypalCreate(reference); // validates the address before charging
+            return paypalOrderId;
+          } catch (e) {
+            onError(e instanceof Error ? e.message : "Couldn't start payment.");
+            throw e;
+          }
         },
         onApprove: async (data: { orderID: string }) => {
           const res = await api.paypalCapture(st.current.reference, data.orderID);
