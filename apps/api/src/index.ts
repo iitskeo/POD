@@ -549,7 +549,7 @@ export default {
           const countries = (r.result ?? [])
             .map((c) => ({ code: c.code, name: c.name, states: c.states ? [...c.states].sort(byName) : null }))
             .sort(byName);
-          return json({ countries }, { headers: { "Cache-Control": "public, max-age=86400" } }, headers);
+          return json({ countries }, { headers: { "Cache-Control": "no-store" } }, headers);
         } catch {
           return json({ countries: [] }, {}, headers);
         }

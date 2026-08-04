@@ -135,7 +135,7 @@ export class ApiClient {
   }
   // Countries Printful ships to (with state lists where required) for the checkout country picker.
   shippingCountries() {
-    return this.req<{ countries: Array<{ code: string; name: string; states: Array<{ code: string; name: string }> | null }> }>("/api/shipping/countries");
+    return this.req<{ countries: Array<{ code: string; name: string; states: Array<{ code: string; name: string }> | null }> }>(`/api/shipping/countries?_=${Date.now()}`, { cache: "no-store" });
   }
 
   // Payments (PayPal) — hosted; the server owns the amount.
