@@ -133,6 +133,10 @@ export class ApiClient {
   shippingRate(shipping: Record<string, string>, items: Array<{ variantId: string; qty: number }>) {
     return this.req<{ shippingCents: number | null }>("/api/shipping/rate", { method: "POST", body: JSON.stringify({ shipping, items }) });
   }
+  // Countries Printful ships to (with state lists where required) for the checkout country picker.
+  shippingCountries() {
+    return this.req<{ countries: Array<{ code: string; name: string; states: Array<{ code: string; name: string }> | null }> }>("/api/shipping/countries");
+  }
 
   // Payments (PayPal) — hosted; the server owns the amount.
   paypalConfig() { return this.req<{ configured: boolean; clientId: string | null; env: string }>("/api/pay/paypal/config"); }

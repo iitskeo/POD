@@ -538,6 +538,20 @@ export default {
         return json({ id, name: body.name, elements: body.elements }, {}, headers);
       }
 
+      // Countries Printful ships to (public), for the checkout country picker. Each entry carries
+      // its state/province list when Printful requires one (US, CA, AU, ...); otherwise states=null.
+      if (path === "/api/shipping/countries" && req.method === "GET") {
+        const store = await currentStore(env);
+        if (!store) return json({ countries: [] }, {}, headers);
+        try {
+          const r = await call<{ result: Array<{ code: string; name: string; states: Array<{ code: string; name: string }> | null }> }>(env, store, "/countries");
+          const countries = (r.result ?? []).map((c) => ({ code: c.code, name: c.name, states: c.states ?? null }));
+          return json({ countries }, { headers: { "Cache-Control": "public, max-age=86400" } }, headers);
+        } catch {
+          return json({ countries: [] }, {}, headers);
+        }
+      }
+
       // Live shipping quote for the checkout summary (public). Cheapest Printful rate, in cents.
       if (path === "/api/shipping/rate" && req.method === "POST") {
         const store = await currentStore(env);

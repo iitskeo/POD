@@ -68,34 +68,56 @@ function PayPalButtons({ clientId, buildPayload, onPaid, onError }: {
   return <div ref={ref} className="paypal-buttons" />;
 }
 
+interface Country { code: string; name: string; states: Array<{ code: string; name: string }> | null }
+// Used only until Printful's country list loads (or if it fails); keeps US checkout working.
+const US_FALLBACK: Country[] = [{ code: "US", name: "United States", states: STATES.map((s) => ({ code: s, name: s })) }];
+
 export function Checkout() {
   const lines = useCart();
-  const [f, setF] = useState({ email: "", fullName: "", address1: "", address2: "", city: "", state: "CA", zip: "" });
+  const [f, setF] = useState({ email: "", fullName: "", address1: "", address2: "", city: "", state: "CA", zip: "", country: "US" });
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pp, setPp] = useState<{ configured: boolean; clientId: string | null } | null>(null);
+  const [countries, setCountries] = useState<Country[]>(US_FALLBACK);
   const [shipCents, setShipCents] = useState<number | null>(null);
   const [quoting, setQuoting] = useState(false);
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
 
   useEffect(() => { api.paypalConfig().then(setPp).catch(() => setPp({ configured: false, clientId: null })); }, []);
+  useEffect(() => {
+    api.shippingCountries()
+      .then((r) => { if (r.countries.length) setCountries(r.countries); })
+      .catch(() => { /* keep the US fallback */ });
+  }, []);
 
   if (lines.length === 0) { navigate("/"); return null; }
   const subtotal = cart.subtotalCents();
-  const valid = f.email.includes("@") && !!f.fullName && !!f.address1 && !!f.city && !!f.zip;
+  const curCountry = countries.find((c) => c.code === f.country) ?? countries[0];
+  const states = curCountry?.states ?? null;
+  const hasStates = !!states?.length;
+  // Some Printful destinations have no postal code; only require ZIP where a state is also required.
+  const zipReq = hasStates;
+  const valid = f.email.includes("@") && !!f.fullName && !!f.address1 && !!f.city
+    && (!hasStates || !!f.state) && (!zipReq || !!f.zip);
+
+  // When the buyer switches country, reset the state to that country's first option (or clear it).
+  const setCountry = (code: string) => {
+    const c = countries.find((x) => x.code === code);
+    setF((s) => ({ ...s, country: code, state: c?.states?.length ? c.states[0].code : "" }));
+  };
 
   // Quote Printful's live shipping once the address is complete, so the buyer sees the real
   // total before paying. Debounced; the server recomputes + owns the amount at charge time.
-  const addrReady = !!f.address1 && !!f.city && !!f.state && !!f.zip;
+  const addrReady = !!f.address1 && !!f.city && (!hasStates || !!f.state) && (!zipReq || !!f.zip);
   const shipItems = lines.map((l) => ({ variantId: l.variantId, qty: l.qty }));
-  const shipKey = JSON.stringify([f.address1, f.city, f.state, f.zip, shipItems]);
+  const shipKey = JSON.stringify([f.country, f.address1, f.city, f.state, f.zip, shipItems]);
   useEffect(() => {
     if (!addrReady) { setShipCents(null); return; }
     let live = true;
     setQuoting(true);
     const t = setTimeout(() => {
-      api.shippingRate({ address1: f.address1, city: f.city, state: f.state, zip: f.zip, country: "US" }, shipItems)
+      api.shippingRate({ address1: f.address1, city: f.city, state: f.state, zip: f.zip, country: f.country }, shipItems)
         .then((r) => { if (live) setShipCents(r.shippingCents); })
         .catch(() => { if (live) setShipCents(null); })
         .finally(() => { if (live) setQuoting(false); });
@@ -126,7 +148,7 @@ export function Checkout() {
     }
     return {
       email: f.email, notify,
-      shipping: { fullName: f.fullName, address1: f.address1, address2: f.address2, city: f.city, state: f.state, zip: f.zip, country: "US" },
+      shipping: { fullName: f.fullName, address1: f.address1, address2: f.address2, city: f.city, state: f.state, zip: f.zip, country: f.country },
       items,
     };
   };
@@ -148,14 +170,19 @@ export function Checkout() {
         <h1>Checkout</h1>
         <span className="eyebrow">Contact</span>
         <input type="email" placeholder="Email" value={f.email} onChange={(e) => set("email", e.target.value)} required />
-        <span className="eyebrow">Shipping address (US)</span>
+        <span className="eyebrow">Shipping address</span>
         <input placeholder="Full name" value={f.fullName} onChange={(e) => set("fullName", e.target.value)} />
+        <select value={f.country} onChange={(e) => setCountry(e.target.value)}>
+          {countries.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+        </select>
         <input placeholder="Address" value={f.address1} onChange={(e) => set("address1", e.target.value)} />
         <input placeholder="Apt, suite (optional)" value={f.address2} onChange={(e) => set("address2", e.target.value)} />
         <div className="row3">
           <input placeholder="City" value={f.city} onChange={(e) => set("city", e.target.value)} />
-          <select value={f.state} onChange={(e) => set("state", e.target.value)}>{STATES.map((s) => <option key={s}>{s}</option>)}</select>
-          <input placeholder="ZIP" value={f.zip} onChange={(e) => set("zip", e.target.value)} />
+          {hasStates
+            ? <select value={f.state} onChange={(e) => set("state", e.target.value)}>{states!.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select>
+            : <input placeholder="State / Province (optional)" value={f.state} onChange={(e) => set("state", e.target.value)} />}
+          <input placeholder={zipReq ? "ZIP" : "Postal code (optional)"} value={f.zip} onChange={(e) => set("zip", e.target.value)} />
         </div>
         {error && <p className="hint warn">{error}</p>}
       </form>
