@@ -74,7 +74,7 @@ const US_FALLBACK: Country[] = [{ code: "US", name: "United States", states: STA
 
 export function Checkout() {
   const lines = useCart();
-  const [f, setF] = useState({ email: "", fullName: "", address1: "", address2: "", city: "", state: "CA", zip: "", country: "US" });
+  const [f, setF] = useState({ email: "", fullName: "", address1: "", address2: "", city: "", state: "", zip: "", country: "US" });
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,11 +101,9 @@ export function Checkout() {
   const valid = f.email.includes("@") && !!f.fullName && !!f.address1 && !!f.city
     && (!hasStates || !!f.state) && (!zipReq || !!f.zip);
 
-  // When the buyer switches country, reset the state to that country's first option (or clear it).
-  const setCountry = (code: string) => {
-    const c = countries.find((x) => x.code === code);
-    setF((s) => ({ ...s, country: code, state: c?.states?.length ? c.states[0].code : "" }));
-  };
+  // When the buyer switches country, clear the state so they pick it explicitly (never default
+  // to a random first option like the "Armed Forces" APO/FPO codes Printful lists first).
+  const setCountry = (code: string) => setF((s) => ({ ...s, country: code, state: "" }));
 
   // Quote Printful's live shipping once the address is complete, so the buyer sees the real
   // total before paying. Debounced; the server recomputes + owns the amount at charge time.
@@ -180,7 +178,10 @@ export function Checkout() {
         <div className="row3">
           <input placeholder="City" value={f.city} onChange={(e) => set("city", e.target.value)} />
           {hasStates
-            ? <select value={f.state} onChange={(e) => set("state", e.target.value)}>{states!.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select>
+            ? <select value={f.state} onChange={(e) => set("state", e.target.value)}>
+                <option value="" disabled>State</option>
+                {states!.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+              </select>
             : <input placeholder="State / Province (optional)" value={f.state} onChange={(e) => set("state", e.target.value)} />}
           <input placeholder={zipReq ? "ZIP" : "Postal code (optional)"} value={f.zip} onChange={(e) => set("zip", e.target.value)} />
         </div>

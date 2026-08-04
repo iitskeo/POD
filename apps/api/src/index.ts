@@ -545,7 +545,10 @@ export default {
         if (!store) return json({ countries: [] }, {}, headers);
         try {
           const r = await call<{ result: Array<{ code: string; name: string; states: Array<{ code: string; name: string }> | null }> }>(env, store, "/countries");
-          const countries = (r.result ?? []).map((c) => ({ code: c.code, name: c.name, states: c.states ?? null }));
+          const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+          const countries = (r.result ?? [])
+            .map((c) => ({ code: c.code, name: c.name, states: c.states ? [...c.states].sort(byName) : null }))
+            .sort(byName);
           return json({ countries }, { headers: { "Cache-Control": "public, max-age=86400" } }, headers);
         } catch {
           return json({ countries: [] }, {}, headers);
