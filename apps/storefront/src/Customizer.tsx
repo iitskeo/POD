@@ -68,6 +68,15 @@ export function Customizer({ slug }: { slug: string }) {
   const canAdd = !!variant && !overflow;
   const reason = !variant ? "Choose size and color" : overflow ? "Text is too long" : "";
 
+  // Hero image = the real product in the chosen colour with the design (Printful mockup); until a
+  // colour's mockup exists we fall back to its plain photo. The live editable canvas is only shown
+  // when the customer actually has something to change (text/graphic slots) — for a fixed design
+  // the mockup already IS the product, so we don't clutter it with a schematic preview.
+  const hasSlots = slots.length > 0;
+  const colorMockup = color ? product.mockups?.byColor?.[color] : undefined;
+  const heroImg = colorMockup ?? previewVariant?.image ?? product.mockups?.featured?.[0];
+  const showLive = hasSlots || !heroImg;
+
   const addToCart = () => {
     if (!variant) return;
     cart.add({
@@ -84,34 +93,25 @@ export function Customizer({ slug }: { slug: string }) {
   return (
     <div className="cz">
       <div className="cz-stage">
-        <div className="placement-tabs light">
-          {placements.filter((pl) => countFor(pl.placement) > 0).map((pl) => (
-            <button key={pl.placement} data-on={pl.placement === active} onClick={() => setActive(pl.placement)}>{pl.placement}</button>
-          ))}
-        </div>
-        <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize" />
-        <p className="hint">Live preview — this is what prints.</p>
-
-        {(() => {
-          // One clean image of the chosen colour: the per-colour Printful mockup (design + colour,
-          // docs/pod/09 P2) when we have it, else the real per-colour product photo. No stray
-          // featured mockups of other colours — the live preview above already shows the design.
-          const colorMockup = color ? product.mockups?.byColor?.[color] : undefined;
-          const primary = colorMockup ?? previewVariant?.image;
-          if (!primary) return null;
-          return (
-            <div className="cz-real">
-              <span className="eyebrow">On the product{color ? ` · ${color}` : ""}</span>
-              <div className="mockup-row">
-                <img src={primary} alt={`${product.name} ${color ?? ""}`} loading="lazy" />
-              </div>
-              <p className="hint">
-                {colorMockup ? "Your design on the real product. " : "The real product in your chosen colour. "}
-                Your exact text shows in the live preview above.
-              </p>
+        {heroImg && (
+          <div className="cz-hero">
+            <img src={heroImg} alt={`${product.name} ${color ?? ""}`} />
+            <p className="hint">
+              {colorMockup ? "Your design on the real product" : "The real product in your chosen colour"}{color ? ` · ${color}` : ""}
+            </p>
+          </div>
+        )}
+        {showLive && (
+          <div className="cz-live">
+            <div className="placement-tabs light">
+              {placements.filter((pl) => countFor(pl.placement) > 0).map((pl) => (
+                <button key={pl.placement} data-on={pl.placement === active} onClick={() => setActive(pl.placement)}>{pl.placement}</button>
+              ))}
             </div>
-          );
-        })()}
+            <PlacementStage placement={placement} elements={design.elements} values={values} resolver={resolver} mode="customize" />
+            <p className="hint">{hasSlots ? "Live preview of your text & graphics" : "Live preview — this is what prints."}</p>
+          </div>
+        )}
       </div>
 
       <aside className="cz-controls">
