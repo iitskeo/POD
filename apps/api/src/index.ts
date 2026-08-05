@@ -276,8 +276,21 @@ async function renderMockup(
   return json({ taskId: id }, {}, headers);
 }
 
-/** One status check for a mockup task (the client polls this). */
-async function pollMockup(env: Env, store: StoreRow, taskId: string, headers: HeadersInit): Promise<Response> {
+/** Copy a Printful mockup into our R2 so the stored storefront URL never expires. Printful serves
+ *  mockups from a temporary S3 URL (…/tmp/…) that eventually 403s; we self-host a stable copy. */
+async function persistMockup(env: Env, origin: string, taskId: string, variantId: number, srcUrl: string): Promise<string> {
+  const res = await fetch(srcUrl);
+  if (!res.ok) throw new Error(`mockup fetch ${res.status}`);
+  const key = `${taskId}-${variantId}-${crypto.randomUUID().slice(0, 8)}`;
+  await env.BUCKET.put(`mockups/${key}.jpg`, await res.arrayBuffer(), {
+    httpMetadata: { contentType: res.headers.get("content-type") ?? "image/jpeg" },
+  });
+  return `${origin}/api/mockups/${key}`;
+}
+
+/** One status check for a mockup task (the client polls this). On completion each Printful mockup
+ *  is copied into R2 so the URL we hand the storefront stays valid forever. */
+async function pollMockup(env: Env, store: StoreRow, taskId: string, origin: string, headers: HeadersInit): Promise<Response> {
   const res = await call<{ data?: MockupTask[] | MockupTask }>(env, store, `/v2/mockup-tasks?id=${taskId}`);
   const raw = res.data ?? res;
   const t = (Array.isArray(raw) ? raw[0] : raw) as MockupTask;
@@ -285,8 +298,12 @@ async function pollMockup(env: Env, store: StoreRow, taskId: string, headers: He
     return json({ status: "failed", error: t.failure_reasons?.join("; ") ?? "Printful failed" }, {}, headers);
   }
   if (t.status === "completed") {
-    const mockups = (t.catalog_variant_mockups ?? []).flatMap((v) =>
+    const printful = (t.catalog_variant_mockups ?? []).flatMap((v) =>
       v.mockups.map((m) => ({ variantId: v.catalog_variant_id, url: m.mockup_url })));
+    const mockups = await Promise.all(printful.map(async (m) => ({
+      variantId: m.variantId,
+      url: await persistMockup(env, origin, taskId, m.variantId, m.url).catch(() => m.url),
+    })));
     return json({ status: "completed", mockups, urls: mockups.map((m) => m.url) }, {}, headers);
   }
   return json({ status: "pending" }, {}, headers);
@@ -489,6 +506,14 @@ export default {
         const obj = await env.BUCKET.get(`print-files/${pf[1]}.png`);
         if (!obj) return json({ error: "not found" }, { status: 404 }, headers);
         return new Response(obj.body, { headers: { ...headers, "Content-Type": "image/png" } });
+      }
+
+      // Self-hosted Printful mockups (public GET) — durable copies so storefront URLs never expire.
+      const mk = path.match(/^\/api\/mockups\/([\w.-]+)$/);
+      if (mk && req.method === "GET") {
+        const obj = await env.BUCKET.get(`mockups/${mk[1]}.jpg`);
+        if (!obj) return json({ error: "not found" }, { status: 404 }, headers);
+        return new Response(obj.body, { headers: { ...headers, "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" } });
       }
 
       // Uploads & assets bytes (public GET)
@@ -767,7 +792,7 @@ export default {
         if (!store) return json({ error: "Printful is not connected" }, { status: 409 }, headers);
         const taskId = url.searchParams.get("task");
         if (!taskId) return json({ error: "Missing task id" }, { status: 400 }, headers);
-        return pollMockup(env, store, taskId, headers);
+        return pollMockup(env, store, taskId, url.origin, headers);
       }
       // Draft-order test (admin): submit a print file to Printful as a DRAFT (no charge, no
       // confirm) to validate the fulfilment mapping. Returns Printful's raw response.
