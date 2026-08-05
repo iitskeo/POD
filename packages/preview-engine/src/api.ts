@@ -129,6 +129,15 @@ export class ApiClient {
   createOrder(body: unknown) { return this.req<{ id: string; reference: string; status: string }>("/api/orders", { method: "POST", body: JSON.stringify(body) }); }
   order(reference: string) { return this.req<StoredOrder>(`/api/orders/${reference}`); }
 
+  // Order history (admin)
+  adminOrders() { return this.req<{ orders: AdminOrder[] }>("/api/orders"); }
+  adminOrder(reference: string) {
+    return this.req<{ order: AdminOrderDetail; printful: PrintfulStatus | null }>(`/api/orders/${reference}/detail`);
+  }
+  retryFulfillment(reference: string) {
+    return this.req<{ ok: boolean; error?: string; fulfillmentStatus: string | null; printfulOrderId?: string | null }>(`/api/orders/${reference}/retry`, { method: "POST" });
+  }
+
   // Live shipping quote (cheapest Printful rate, in cents; null if it can't be quoted).
   shippingRate(shipping: Record<string, string>, items: Array<{ variantId: string; qty: number }>) {
     return this.req<{ shippingCents: number | null }>("/api/shipping/rate", { method: "POST", body: JSON.stringify({ shipping, items }) });
@@ -167,6 +176,21 @@ export function minPrice(p: ProductPrices): number | null {
 export interface StoredOrder {
   id: string; reference: string; status: string; email: string;
   subtotalCents: number; currency: string;
+}
+
+export interface AdminOrder {
+  reference: string; status: string; email: string; customer: string; country: string | null;
+  subtotalCents: number; shippingCents: number; totalCents: number; currency: string;
+  paidAt: number | null; createdAt: number; units: number;
+  printfulOrderId: string | null; fulfillmentStatus: string | null; fulfillmentError: string | null;
+}
+export interface AdminOrderDetail extends AdminOrder {
+  shipping: Record<string, string>;
+  items: Array<{ name: string; variantLabel: string; qty: number; unitPriceCents: number }>;
+}
+export interface PrintfulStatus {
+  status: string | null;
+  shipments: Array<{ carrier: string | null; service: string | null; trackingNumber: string | null; trackingUrl: string | null; shipDate: string | null }>;
 }
 
 export interface QuickDesign { id: string; name: string; elements: Element[] }

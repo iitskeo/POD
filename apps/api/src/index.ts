@@ -405,6 +405,37 @@ async function onOrderPaid(env: Env, reference: string): Promise<void> {
   }
 }
 
+// ---- Order history (admin) helpers ----------------------------------------------
+
+interface OrderListRow {
+  reference: string; status: string; email: string; shipping: string;
+  subtotal_cents: number; shipping_cents: number | null; currency: string;
+  paid_at: number | null; created_at: number;
+  printful_order_id: string | null; fulfillment_status: string | null; fulfillment_error: string | null;
+  units?: number;
+}
+function toAdminOrder(o: OrderListRow) {
+  const s = JSON.parse(o.shipping || "{}") as Record<string, string>;
+  return {
+    reference: o.reference, status: o.status, email: o.email,
+    customer: s.fullName || o.email, country: s.country || null,
+    subtotalCents: o.subtotal_cents, shippingCents: o.shipping_cents ?? 0,
+    totalCents: o.subtotal_cents + (o.shipping_cents ?? 0), currency: o.currency,
+    paidAt: o.paid_at, createdAt: o.created_at, units: o.units ?? 0,
+    printfulOrderId: o.printful_order_id,
+    fulfillmentStatus: o.fulfillment_status, fulfillmentError: o.fulfillment_error,
+  };
+}
+
+interface PrintfulShipment { carrier?: string; service?: string; tracking_number?: string; tracking_url?: string; ship_date?: string }
+interface PrintfulOrderData { status?: string; shipments?: PrintfulShipment[] }
+function mapShipments(d: PrintfulOrderData): Array<{ carrier: string | null; service: string | null; trackingNumber: string | null; trackingUrl: string | null; shipDate: string | null }> {
+  return (d.shipments ?? []).map((s) => ({
+    carrier: s.carrier ?? null, service: s.service ?? null,
+    trackingNumber: s.tracking_number ?? null, trackingUrl: s.tracking_url ?? null, shipDate: s.ship_date ?? null,
+  }));
+}
+
 // ---- Router --------------------------------------------------------------------
 
 export default {
@@ -639,6 +670,84 @@ export default {
       if (path === "/api/orders" && req.method === "POST") {
         return createOrder(env, await req.json(), headers);
       }
+
+      // Order history (admin): paid orders, newest first, with our Printful fulfilment state.
+      if (path === "/api/orders" && req.method === "GET") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const { results } = await env.DB.prepare(
+          `SELECT o.reference, o.status, o.email, o.shipping, o.subtotal_cents, o.shipping_cents,
+                  o.currency, o.paid_at, o.created_at, o.printful_order_id, o.fulfillment_status, o.fulfillment_error,
+                  COALESCE(SUM(oi.qty), 0) AS units
+           FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id
+           WHERE o.status = 'paid'
+           GROUP BY o.id
+           ORDER BY o.paid_at DESC, o.created_at DESC`,
+        ).all<OrderListRow>();
+        return json({ orders: results.map(toAdminOrder) }, {}, headers);
+      }
+
+      // Order detail (admin): full record + items + Printful's live status/tracking (on demand).
+      const detailRef = path.match(/^\/api\/orders\/([\w-]+)\/detail$/);
+      if (detailRef && req.method === "GET") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const o = await env.DB.prepare(
+          `SELECT id, reference, status, email, shipping, subtotal_cents, shipping_cents, currency,
+                  paid_at, created_at, printful_order_id, fulfillment_status, fulfillment_error
+           FROM orders WHERE reference = ?`,
+        ).bind(detailRef[1]).first<OrderListRow & { id: string }>();
+        if (!o) return json({ error: "not found" }, { status: 404 }, headers);
+        const { results: items } = await env.DB.prepare(
+          `SELECT oi.variant_label, oi.qty, oi.unit_price_cents, p.name
+           FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?`,
+        ).bind(o.id).all<{ variant_label: string; qty: number; unit_price_cents: number; name: string | null }>();
+
+        let printful: { status: string | null; shipments: ReturnType<typeof mapShipments> } | null = null;
+        if (o.printful_order_id) {
+          const store = await currentStore(env);
+          if (store) {
+            try {
+              const r = await callMethod<{ data?: PrintfulOrderData } & PrintfulOrderData>(
+                env, store, "GET", `/v2/orders/${encodeURIComponent(o.printful_order_id)}`,
+              );
+              const d = r.data ?? r;
+              printful = { status: d.status ?? null, shipments: mapShipments(d) };
+            } catch (e) {
+              printful = { status: `error: ${e instanceof Error ? e.message : String(e)}`, shipments: [] };
+            }
+          }
+        }
+        const s = JSON.parse(o.shipping || "{}") as Record<string, string>;
+        return json({
+          order: {
+            ...toAdminOrder(o), shipping: s,
+            items: items.map((i) => ({ name: i.name ?? "Item", variantLabel: i.variant_label, qty: i.qty, unitPriceCents: i.unit_price_cents })),
+          },
+          printful,
+        }, {}, headers);
+      }
+
+      // Retry Printful fulfilment for a paid order that failed (admin).
+      const retryRef = path.match(/^\/api\/orders\/([\w-]+)\/retry$/);
+      if (retryRef && req.method === "POST") {
+        if (!(await authed())) return json({ error: "Unauthorized" }, { status: 401 }, headers);
+        const o = await env.DB.prepare("SELECT id FROM orders WHERE reference = ? AND status = 'paid'")
+          .bind(retryRef[1]).first<{ id: string }>();
+        if (!o) return json({ error: "not found" }, { status: 404 }, headers);
+        const store = await currentStore(env);
+        if (!store) return json({ error: "Printful not connected" }, { status: 409 }, headers);
+        try {
+          await fulfillOrder(env, store, o.id, env.PAYPAL_ENV === "live");
+          const row = await env.DB.prepare("SELECT fulfillment_status, printful_order_id FROM orders WHERE id = ?")
+            .bind(o.id).first<{ fulfillment_status: string | null; printful_order_id: string | null }>();
+          return json({ ok: true, fulfillmentStatus: row?.fulfillment_status ?? null, printfulOrderId: row?.printful_order_id ?? null }, {}, headers);
+        } catch (e) {
+          const msg = String(e instanceof Error ? e.message : e).slice(0, 300);
+          await env.DB.prepare("UPDATE orders SET fulfillment_status='failed', fulfillment_error=?1, updated_at=?2 WHERE id=?3")
+            .bind(msg, Date.now(), o.id).run().catch(() => {});
+          return json({ ok: false, error: msg }, { status: 422 }, headers);
+        }
+      }
+
       const orderRef = path.match(/^\/api\/orders\/([\w-]+)$/);
       if (orderRef && req.method === "GET") {
         const row = await env.DB.prepare("SELECT * FROM orders WHERE reference = ?").bind(orderRef[1])

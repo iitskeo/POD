@@ -1,6 +1,6 @@
 import { Icon } from "@abbiss/preview-engine";
 
-export type Dest = "store" | "create" | "products";
+export type Dest = "store" | "create" | "products" | "orders";
 
 /** Persistent left nav (spec 07 §1): My Store · Create Products · My Products. */
 export function Sidebar({ dest, onNavigate, onLogout }: {
@@ -18,6 +18,9 @@ export function Sidebar({ dest, onNavigate, onLogout }: {
         </button>
         <button className="side-link" data-on={dest === "products"} onClick={() => onNavigate("products")}>
           <span className="si"><Icon name="grid" size={17} /></span> My Products
+        </button>
+        <button className="side-link" data-on={dest === "orders"} onClick={() => onNavigate("orders")}>
+          <span className="si"><Icon name="layers" size={17} /></span> Orders
         </button>
       </nav>
       <div className="spacer" />
