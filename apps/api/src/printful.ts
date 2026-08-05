@@ -418,24 +418,14 @@ export interface MockupTask {
   failure_reasons?: string[];
 }
 
-/** Creates a mockup task. Async: the result is polled, not returned. */
+/** Creates a mockup task. Async: the result is polled, not returned. Goes through callMethod so
+ *  an expired access token is refreshed (a raw fetch would 401 and fail the whole publish). */
 export async function createMockupTask(
   env: Env,
   store: StoreRow,
   body: unknown,
 ): Promise<MockupTask> {
-  const res = await fetch(`${API}/v2/mockup-tasks`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${store.access_token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json()) as Record<string, unknown>;
-  if (!res.ok) {
-    throw new Error(`Printful ${res.status}: ${JSON.stringify(json).slice(0, 300)}`);
-  }
+  const json = await callMethod<{ data?: MockupTask } & MockupTask>(env, store, "POST", "/v2/mockup-tasks", body);
   return (json.data ?? json) as MockupTask;
 }
 

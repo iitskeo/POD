@@ -1,10 +1,8 @@
 import {
   defaultValues, makeResolver, renderPrintFilePng, Icon, type Product,
 } from "@abbiss/preview-engine";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-
-const MAX_MOCKUPS = 5;
 
 /** My Products (spec 07 §9): price, publish/unpublish, and mockup selection at publish. */
 export function MyProducts({ onDesign }: { onDesign: (productId: string) => void }) {
@@ -29,10 +27,7 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
     setProducts((ps) => ps.map((x) => (x.id === p.id ? up : x)));
   };
 
-  const onPublished = (up: Product) => {
-    setProducts((ps) => ps.map((x) => (x.id === up.id ? up : x)));
-    setPublishing(null);
-  };
+  const onUpdated = (up: Product) => setProducts((ps) => ps.map((x) => (x.id === up.id ? up : x)));
 
   const remove = async (p: Product) => {
     try {
@@ -95,7 +90,7 @@ export function MyProducts({ onDesign }: { onDesign: (productId: string) => void
         ))}
       </div>
 
-      {publishing && <PublishModal product={publishing} onClose={() => setPublishing(null)} onPublished={onPublished} />}
+      {publishing && <PublishModal product={publishing} onClose={() => setPublishing(null)} onUpdated={onUpdated} />}
       {editing && <ProductEditModal product={editing} onClose={() => setEditing(null)}
         onSaved={(up) => { setProducts((ps) => ps.map((x) => (x.id === up.id ? up : x))); setEditing(null); }} />}
       {deleting && (
@@ -156,18 +151,23 @@ function ProductEditModal({ product, onClose, onSaved }: { product: Product; onC
   );
 }
 
-/** Generate mockups, then an Instagram-style ordered pick (first = main). */
-function PublishModal({ product, onClose, onPublished }: {
-  product: Product; onClose: () => void; onPublished: (p: Product) => void;
+/**
+ * Fast publish: generate the main colour's mockup (single variant, like Printful's own page),
+ * publish immediately, then fill the other offered colours' previews in the background — one
+ * small task per colour, persisted as each lands. Closing the modal stops the background fill;
+ * missing colours fall back to the real product photo and can be regenerated via "Mockups".
+ */
+function PublishModal({ product, onClose, onUpdated }: {
+  product: Product; onClose: () => void; onUpdated: (p: Product) => void;
 }) {
   const resolver = useMemo(() => makeResolver(api), []);
-  const [phase, setPhase] = useState<"gen" | "pick" | "saving">("gen");
+  const [phase, setPhase] = useState<"main" | "colors" | "done" | "error">("main");
   const [elapsed, setElapsed] = useState(0);
-  const [generated, setGenerated] = useState<string[]>([]);
-  const [featured, setFeatured] = useState<string[]>([]);
-  const [byColor, setByColor] = useState<Record<string, string>>({});
+  const [mainUrl, setMainUrl] = useState<string | null>(null);
+  const [colorCount, setColorCount] = useState({ done: 0, total: 0 });
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const published = useRef(false);
 
   useEffect(() => {
     let stop = false;
@@ -175,6 +175,7 @@ function PublishModal({ product, onClose, onPublished }: {
     const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 500);
     (async () => {
       try {
+        // Render the design's print files once (the Worker can't render canvas).
         const design = await api.designForProduct(product.id).catch(() => null);
         const elements = design?.elements ?? [];
         const values = defaultValues(elements);
@@ -185,58 +186,66 @@ function PublishModal({ product, onClose, onPublished }: {
           const { url } = await api.uploadPrintFile(`pub-${product.id}-${pl.placement}-${Date.now()}`, png);
           files.push({ placement: pl.placement, printFileUrl: url });
         }
-        if (!files.length) { if (!stop) { setError("Add art in the studio before publishing."); } return; }
-        // One representative variant per offered colour (docs/pod/09 P2), so Printful renders a
-        // per-colour mockup with the design. Falls back to the default variant if uncurated.
+        if (!files.length) { if (!stop) { setError("Add art in the studio before publishing."); setPhase("error"); } return; }
+
+        // One representative variant per offered colour, in Printful's order (first = main).
         const offered = product.offeredVariantColors;
         const colorVariant = new Map<string, number>();
         for (const v of product.variants) {
           if (v.color && (!offered || offered.includes(v.color)) && !colorVariant.has(v.color)) colorVariant.set(v.color, v.id);
         }
-        const mockups = await api.mockup(product.id, files, [...colorVariant.values()]);
+        const entries = [...colorVariant.entries()];
+        if (!entries.length) { if (!stop) { setError("This product has no colour to mock up."); setPhase("error"); } return; }
+        const [mainColor, mainVariant] = entries[0];
+
+        // 1) Main mockup — a single variant renders fast — then publish right away.
+        const main = await api.mockup(product.id, files, [mainVariant]);
         if (stop) return;
-        const colorOf = new Map(product.variants.map((v) => [v.id, v.color] as const));
-        const map: Record<string, string> = {};
-        for (const m of mockups) { const col = colorOf.get(m.variantId); if (col && !map[col]) map[col] = m.url; }
-        const urls = mockups.map((m) => m.url);
-        setGenerated(urls.slice(0, 12));
-        setByColor(map);
-        setFeatured(urls.slice(0, 1)); // default: first is the main image
-        setPhase("pick");
+        const mUrl = main[0]?.url ?? null;
+        setMainUrl(mUrl);
+        const byColor: Record<string, string> = mUrl ? { [mainColor]: mUrl } : {};
+        const up = await api.patchProduct(product.id, {
+          status: "published",
+          mockups: { generated: mUrl ? [mUrl] : [], featured: mUrl ? [mUrl] : [], byColor: { ...byColor } },
+        });
+        published.current = true;
+        if (!stop) onUpdated(up);
+
+        // 2) Remaining colours in the background — one task each, saved as they complete.
+        const rest = entries.slice(1);
+        if (!rest.length) { if (!stop) setPhase("done"); return; }
+        if (!stop) { setPhase("colors"); setColorCount({ done: 0, total: rest.length }); }
+        for (const [color, variantId] of rest) {
+          if (stop) break;
+          try {
+            const r = await api.mockup(product.id, files, [variantId]);
+            const u = r.find((x) => x.variantId === variantId)?.url ?? r[0]?.url;
+            if (u) {
+              byColor[color] = u;
+              const generated = Object.values(byColor);
+              const up2 = await api.patchProduct(product.id, {
+                mockups: { generated, featured: mUrl ? [mUrl] : generated.slice(0, 1), byColor: { ...byColor } },
+              });
+              if (!stop) onUpdated(up2);
+            }
+          } catch { /* skip a colour Printful can't render; the product photo covers it */ }
+          if (!stop) setColorCount((c) => ({ ...c, done: c.done + 1 }));
+        }
+        if (!stop) setPhase("done");
       } catch (e) {
-        if (!stop) setError(e instanceof Error ? e.message : String(e));
+        if (!stop) { setError(e instanceof Error ? e.message : String(e)); setPhase(published.current ? "done" : "error"); }
       } finally { clearInterval(tick); }
     })();
     return () => { stop = true; clearInterval(tick); };
-  }, [product.id, attempt]);
+  }, [product.id, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Escape hatch: publish immediately without mockups so a slow/unsupported product never
-  // blocks the owner. Mockups can be generated later from the product's "Mockups" action.
+  // Escape hatch: publish now with no mockups (a slow/unsupported product never blocks the owner).
   const publishWithout = async () => {
-    setError(""); setPhase("saving");
-    try { onPublished(await api.patchProduct(product.id, { status: "published" })); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); setPhase("gen"); }
+    setError("");
+    try { onUpdated(await api.patchProduct(product.id, { status: "published" })); onClose(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
-  const retry = () => {
-    setError(""); setGenerated([]); setFeatured([]); setByColor({}); setElapsed(0);
-    setPhase("gen"); setAttempt((a) => a + 1);
-  };
-
-  const toggle = (url: string) => {
-    setFeatured((f) => f.includes(url) ? f.filter((u) => u !== url) : (f.length < MAX_MOCKUPS ? [...f, url] : f));
-  };
-  const rank = (url: string) => featured.indexOf(url);
-
-  const confirm = async () => {
-    setPhase("saving");
-    try {
-      const up = await api.patchProduct(product.id, {
-        status: "published",
-        mockups: { generated, featured: featured.length ? featured : generated.slice(0, 1), byColor },
-      });
-      onPublished(up);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); setPhase("pick"); }
-  };
+  const retry = () => { setError(""); setMainUrl(null); setElapsed(0); setPhase("main"); setAttempt((a) => a + 1); };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -248,9 +257,9 @@ function PublishModal({ product, onClose, onPublished }: {
 
         {error && <p className="hint warn">{error}</p>}
 
-        {phase === "gen" && !error && (
+        {phase === "main" && !error && (
           <>
-            <p className="hint">Generating realistic mockups with Printful… {elapsed}s</p>
+            <p className="hint">Generating the main mockup with Printful… {elapsed}s</p>
             <div className="modal-actions">
               <div className="spacer" />
               <button className="btn" onClick={onClose}>Cancel</button>
@@ -259,7 +268,7 @@ function PublishModal({ product, onClose, onPublished }: {
           </>
         )}
 
-        {error && generated.length === 0 && phase !== "saving" && (
+        {phase === "error" && (
           <div className="modal-actions">
             <div className="spacer" />
             <button className="btn" onClick={onClose}>Cancel</button>
@@ -268,26 +277,19 @@ function PublishModal({ product, onClose, onPublished }: {
           </div>
         )}
 
-        {phase !== "gen" && generated.length > 0 && (
+        {(phase === "colors" || phase === "done") && (
           <>
-            <p className="hint">Click mockups to feature them, in order. The first is the main image. Pick 1–{MAX_MOCKUPS}.</p>
-            <div className="mockup-pick">
-              {generated.map((url) => {
-                const r = rank(url);
-                return (
-                  <button key={url} className={`mk-tile${r >= 0 ? " on" : ""}`} onClick={() => toggle(url)}>
-                    <img src={url} alt="mockup" />
-                    {r >= 0 && <span className="mk-num" data-main={r === 0}>{r + 1}</span>}
-                  </button>
-                );
-              })}
-            </div>
+            {mainUrl && <div className="mockup-pick"><div className="mk-tile on"><img src={mainUrl} alt="main mockup" /></div></div>}
+            <p className="hint">
+              Published{mainUrl ? "" : " (no mockup yet)"}.{" "}
+              {phase === "colors"
+                ? `Generating colour previews… ${colorCount.done}/${colorCount.total}. Keep this open to finish them.`
+                : "Colour previews ready."}
+            </p>
             <div className="modal-actions">
-              <span className="hint">{featured.length} selected{featured.length ? ` · main: #${rank(featured[0]) + 1}` : ""}</span>
               <div className="spacer" />
-              <button className="btn" onClick={onClose}>Cancel</button>
-              <button className="cta" disabled={phase === "saving" || featured.length === 0} onClick={confirm}>
-                {phase === "saving" ? "Publishing…" : "Publish"}
+              <button className={phase === "done" ? "cta" : "btn"} onClick={onClose}>
+                {phase === "done" ? "Done" : "Close"}
               </button>
             </div>
           </>
